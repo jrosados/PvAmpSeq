@@ -1,0 +1,283 @@
+---
+title: "Data cleaning"
+author: "Jason_Rosado"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide 
+    code_download: true
+    fig_width: 8
+    fig_height: 6
+    theme: cosmo
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, 
+                      warning = FALSE, 
+                      message = FALSE, 
+                      tidy = TRUE,
+                      fig.width = 8, 
+                      fig.height = 6)
+library(tidyverse)
+library(RColorBrewer) 
+library(ggpubr)
+library("cowplot")
+library(ggh4x)
+library(table1)
+library(tableone) 
+```
+
+## Socio-demographic data
+```{r }
+#####################
+#SOLOMON ISLANDS    #
+#####################
+
+### LIMIT OF DETECTION FOR MINORITY CLONES 2%
+Filter_hap_SI <- readRDS("SI_seq_tbl_End_Filter.rds") %>%
+  filter(Frequency >= 0.01,
+         !info %in% c("MixA", "MixB", "Pv9")) 
+
+AmpSeq_samples_data_SI <- read.delim("sample_table_SI_301220.txt", header = TRUE, sep = "\t")
+
+Epi_data_SI<- read.csv("SI_Master_epi_data.csv", header = T) 
+
+# Merging the AmpSeq run information (copies/uL and Cq) with SI Epi data 
+
+hap_SI_epi<- 
+  Filter_hap_SI %>%
+  left_join(AmpSeq_samples_data_SI, by = c("sample" = "SampleID"))%>%
+  mutate(SampleName = as.integer(SampleName),
+         infoD = as.integer(infoD)) %>% 
+  left_join(Epi_data_SI, by = c("SampleName" = "studyid", "infoD" = "vis_visit_day"))
+
+#########################
+# PERUVIAN COHORT       #
+#########################
+
+Filter_hap_PE <- readRDS("PE_seq_flt_tbl.rds") %>%
+  filter(frequency >= 0.01, 
+         !info %in% c("SI"))
+
+AmpSeq_samples_data_PE <- read.csv("PE_Sample_sheet.csv", header = TRUE)
+
+Epi_data_PE<- read.csv("PE_23_05_18_Clinic_data-3y.csv", header = T)
+
+#Merging the AmpSeq run information (copies/uL and Cq) with PE Epi data
+hap_PE_epi<-
+Filter_hap_PE %>%
+  left_join(AmpSeq_samples_data_PE, by = c("sample_id" = "SampleID")) %>%
+    left_join(Epi_data_PE, by = c("sample_id" = "cod_samp", "PatientName" = "cod_per"))
+
+
+```
+
+## Cleaning low coverage marker
+```{r Eliminating chr04 due to low coverage, results=FALSE}
+#Chr04 was run only in SI but not in Peru
+
+hap_SI_epi <- hap_SI_epi %>%
+  filter(!marker_id %in% c("Chr04")) 
+
+```
+
+## Cleaning low covered samples
+```{r Keeping samples with more than 60% of amplification success (e.g. >6 markers), echo=FALSE}
+
+#Percentage of successful amplification in baseline samples
+amp_success_samp_SI<- hap_SI_epi %>% 
+    group_by(marker_id, sample) %>% 
+    count() %>% 
+    group_by(sample) %>%
+    summarise(n=n())%>% mutate(amp_success = n/max(n))%>%
+  filter(amp_success > 0.6)
+
+sum(amp_success_samp_SI$amp_success < "0.60")
+
+hap_SI_epi <- hap_SI_epi[hap_SI_epi$sample %in% amp_success_samp_SI$sample,]
+
+
+amp_success_samp_PE<- hap_PE_epi %>%
+  group_by(marker_id, sample) %>% 
+    count() %>% 
+    group_by(sample) %>%
+    summarise(n=n())%>% mutate(amp_success = n/max(n)) %>%
+  filter(amp_success > 0.6)
+
+sum(amp_success_samp_PE$amp_success < "0.6")
+
+hap_PE_epi <- hap_PE_epi[hap_PE_epi$sample %in% amp_success_samp_PE$sample,]
+
+
+#write_rds(amp_success_samp_SI,"sols_amp_success.rds", "xz")
+#write_rds(amp_success_samp_PE,"peru_amp_success.rds", "xz")
+
+```
+
+##Description of SI samples
+```{r Selecting SI samples with follow up (paired samples), echo=FALSE, message=FALSE}
+baseline_patients <- Filter_hap_SI %>%
+    filter(infoD==0) %>% 
+    select(info) %>% distinct() 
+    
+follow_patients <- Filter_hap_SI %>% 
+  filter(!infoD ==0)  %>% 
+    select(info, sample) %>% distinct() %>%
+    inner_join(baseline_patients, by = c("info")) 
+
+hap_SI_epi <- hap_SI_epi %>% 
+    mutate(follow = ifelse(infoD ==0, "baseline", "follow_up"),
+    copies_ul = as.numeric(copies_ul),
+    parasites_ul = copies_ul/3,
+    pv_clin = as.factor(pv_clin))%>%
+    inner_join(baseline_patients, by = c("info")) %>%
+    left_join(follow_patients, by = c("info", "sample")) %>%      
+    drop_na(trt_label) %>%
+    distinct() 
+
+patients_episodes_SI<- hap_SI_epi%>%
+  group_by(info) %>%
+        distinct(sample_id) %>%
+  count() %>%
+  ungroup() %>% 
+  mutate(episodes = n) 
+
+patients_sum <- hap_SI_epi %>% 
+  select(info, age_y,gender,trt_label)%>%   
+  group_by(info) %>% 
+  distinct()
+
+samples_sum <- hap_SI_epi %>% 
+  select(info,follow, parasites_ul,pv_clin)%>%   
+  group_by(info) %>% 
+  distinct()
+
+
+
+table1(~ age_y +gender+ trt_label, data = patients_sum, render.continuous = c("Median [Q1, Q3]"))
+
+table1(~ parasites_ul +pv_clin| follow, data = samples_sum, render.continuous = c("Median [Q1, Q3]"))
+
+table_samples_summ<- CreateTableOne(vars = c("parasites_ul","pv_clin"), strata = "follow", data = samples_sum, 
+               factorVars =c("pv_clin"))
+
+print(table_samples_summ,showAllLevels = TRUE,
+      nonnormal = "parasites_ul")
+```
+
+##Description of PE samples
+```{r Selecting PE samples with follow up(paired samples), echo=FALSE, message=FALSE}
+
+rndr <- function(x, ...) {
+    if (is.factor(x) || is.character(x)) {
+        c(render.default(x, ...), c(`Overall N`=sum(!is.na(x))))
+    } else {
+        render.default(x, ...)
+    }
+}
+
+patients_episodes<- hap_PE_epi%>%
+  select(PatientName,sample_id,com)%>%
+   group_by(PatientName,com) %>%
+        distinct(sample_id, com) %>%
+  count() %>%
+  ungroup() %>% 
+  mutate(com = ifelse(com ==1, "Cahuide", "Lupuna"),
+        episodes = n,
+        plus_2epis =ifelse(n ==1, "1", ">1")) 
+
+patients_two_episodes_PE<- hap_PE_epi%>%
+  select(PatientName,sample_id,com)%>%
+   group_by(PatientName,com) %>%
+        distinct(sample_id, com) %>%
+  count() %>%
+  ungroup() %>% 
+  mutate(episodes = n)%>% 
+  filter(episodes>1)
+  
+samples_sum_PE<- hap_PE_epi %>% 
+  select(PatientName,sample, date,parasites_uL,clinic_Pvinf,medicamento2)%>%
+  group_by(PatientName)%>%
+  distinct()%>%
+  mutate(date = as.Date(date, format = "%m/%d/%Y")) %>%
+  mutate(order =rank(date)) %>%
+   mutate(day = factor(ifelse(order== 1,"day_0","day_1"), 
+                        levels = c("day_0","day_1"), 
+                      labels = c("Day 0","Day X")),
+          medicamento2 = case_when(medicamento2 == "C" ~ "CQ+PQ",
+                                  medicamento2 == "-1" ~ "No treatment"))%>%
+  select(sample,day,
+   parasites_uL, clinic_Pvinf,medicamento2) %>% 
+  distinct()
+
+
+Patients_sum_PE<- hap_PE_epi %>% 
+  select(PatientName,date,age, sex, com,medicamento2, clinic_Pvinf) %>%
+  #Selecting the earliest date because age of patient change with time (it is a following study)
+  mutate(date = as.Date(date, format = "%m/%d/%Y") )  %>%
+  group_by(PatientName)%>% 
+  arrange(date) %>% 
+  filter(date == min(date)) %>% 
+    distinct() %>%
+  mutate(sex = ifelse(sex == 1, "male", "female"),
+         com = ifelse(com ==1, "Cahuide", "Lupuna"),
+         medicamento2 = case_when(medicamento2 == "C" ~ "CQ+PQ",
+                                  medicamento2 == "-1" ~ "No treatment"))%>% 
+  select(PatientName,age, com,sex,medicamento2) 
+
+library(table1)
+
+table1(~ age +sex+ medicamento2| com, data = Patients_sum_PE, render.continuous = c("Median [Q1, Q3]"))
+
+table1(~ episodes + factor(plus_2epis)|com, data =  patients_episodes, 
+       render.missing = NULL,
+       render.categorical = "FREQ (PCTnoNA%)",
+       render = rndr)
+
+table1(~ parasites_uL + factor(clinic_Pvinf)| day, data = samples_sum_PE,render.continuous = c("Median [Q1, Q3]") )
+
+library(tableone)
+table_summ_PE<- CreateTableOne(vars = c("parasites_uL","clinic_Pvinf"), strata = "day", data = samples_sum_PE, 
+               factorVars =c("clinic_Pvinf"))
+
+print(table_summ_PE,showAllLevels = TRUE,
+      nonnormal = "parasites_uL")
+
+```
+
+```{r, Success percentage of MARKERS with more than 80% of success, message=FALSE}
+#Percentage of successful amplification in SI samples
+
+success_ratio_SI<- hap_SI_epi %>% 
+    group_by(marker_id, sample_id, follow) %>% 
+    count() %>% 
+    group_by(follow,marker_id) %>%
+    summarise(n=n()) %>% mutate(success = n/max(n))
+
+table1(~ success| follow, data = success_ratio_SI, render.continuous = c("Median [Q1, Q3]"))
+
+table_succes_rate_SI<- CreateTableOne(vars = c("success"), strata = "follow", data = success_ratio_SI)
+
+print(table_succes_rate_SI,showAllLevels = TRUE,
+      nonnormal = "success")
+
+#Percentage of successful amplification in PE samples
+
+success_ratio_PE<- hap_PE_epi %>% 
+    inner_join(samples_sum_PE, by = c("sample")) %>%     
+    group_by(day, marker_id, sample_id) %>% 
+    count() %>% 
+    group_by(day, marker_id) %>%
+    summarise(n=n())%>% mutate(success = n/max(n))
+
+table1(~ success| day, data = success_ratio_PE, render.continuous = c("Median [Q1, Q3]"))
+
+table_succes_rate_PE<- CreateTableOne(vars = c("success"), strata = "day", data = success_ratio_PE)
+
+print(table_succes_rate_PE,showAllLevels = TRUE,
+      nonnormal = "success")
+
+```
+
