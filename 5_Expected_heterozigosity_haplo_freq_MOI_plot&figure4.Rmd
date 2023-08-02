@@ -1,0 +1,736 @@
+---
+title: "Expected heterozigosity"
+author: "Jason_Rosado"
+date: "2023-07-06"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, 
+                      warning = FALSE, 
+                      message = FALSE, 
+                      tidy = TRUE,
+                      fig.width = 8, 
+                      fig.height = 6)
+library(tidyverse)
+library(RColorBrewer) 
+library(ggpubr)
+library(cowplot)
+library(ggh4x)
+library(table1)
+library(tableone) 
+library(RColorBrewer) 
+library(forcats)
+```
+
+```{r echo=FALSE, message=F, warning=F}
+load("./intermediate_data/intermediate_data.RData")
+```
+
+#Expected heterozigosity in all samples
+```{r, echo =FALSE}
+
+# Set colors for plot markers
+
+colour_markers <- c("#E0E0E0", "#B1E4E4", "#75B2B7", 
+                     "#459CC1",
+                    "#0C666E","#E2CABC",
+                    "#F37777","#FF9933", "#ED8707","#AE8873",
+                    "#BA6C17","#733C03") 
+
+#He in SI (all samples)
+
+he_marker_SI <- 
+  hap_SI_epi %>% 
+  group_by(marker_id, sample_id, Haplotype) %>% 
+  count() %>% 
+  group_by(marker_id, Haplotype) %>% 
+   summarise(n=n()) %>% 
+   group_by(marker_id) %>% 
+   mutate(freq = n / sum(n)) %>% 
+   summarise(he = 1 - sum(freq ^2), 
+             n_hap = n())
+  
+he_marker_SI_plot<-he_marker_SI %>%
+  ggplot() +
+  geom_col(aes(x = reorder (marker_id, he), y = he, fill=marker_id), colour = "black") +
+  geom_label(aes(x = marker_id, y = he, label=n_hap), size = 2) +
+  ylab("Expected heterozygosity (He)") + xlab("Markers")+ ggtitle("Solomon Islands")+
+  scale_fill_manual(values = colour_markers)+
+  theme_bw(base_family = "", base_size = 10) +   
+  scale_y_continuous(breaks = c(0,0.2,0.4,0.6, 0.8,1.0),
+                label = c("0.0", "0.2", "0.4", "0.6", "0.8", "1.0")) +
+  theme(axis.text.x = element_text(face = "plain", color="black", size = 8, angle = 0),   legend.position = "none")+
+coord_flip()
+
+#He in Peru
+he_marker_PE<- 
+  hap_PE_epi %>% 
+  inner_join(Epi_data_PE, by =c("sample_id" = "cod_samp"))%>%
+  group_by(cod_per,marker_id,haplotype) %>% 
+  count() %>%
+  group_by(marker_id, haplotype)  %>% 
+   summarise(n=n()) %>% 
+   group_by(marker_id) %>% 
+   mutate(freq = n / sum(n)) %>% 
+   summarise(he = 1 - sum(freq ^2), 
+             n_hap = n())
+
+he_marker_PE_plot <-
+he_marker_PE %>%
+  ggplot() +
+  geom_col(aes(x = reorder (marker_id, he), y = he, fill=marker_id), colour = "black") +
+  geom_label(aes(x = marker_id, y = he, label=n_hap), size = 2) +
+  ylab("Expected heterozygosity (He)") + xlab("")+ ggtitle("Peru")+
+  scale_fill_manual(values = colour_markers)+
+  theme_bw(base_family = "", base_size = 10)+ 
+  scale_y_continuous(breaks = c(0,0.2,0.4,0.6, 0.8,1.0),
+                label = c("0.0", "0.2", "0.4", "0.6", "0.8", "1.0")) +
+  theme(axis.text.x = element_text(face = "plain", color="black", size = 8, angle = 0), legend.position = "none")+
+  coord_flip()
+
+```
+
+#Haplotype frequencies in SI
+```{r}
+
+Hap_freq_Chr07_SI<-
+ hap_SI_epi  %>% 
+  filter(marker_id == "Chr07") %>%
+  group_by(marker_id, Haplotype) %>%
+  count() %>% 
+  ungroup() %>% 
+  arrange(desc(n)) %>% 
+  mutate(Haplotype = factor(Haplotype, levels = Haplotype[order(n, decreasing = TRUE)]))
+
+ Hap_freq_Chr05_SI<-
+  hap_SI_epi %>%
+  filter(marker_id == "Chr05") %>%
+  group_by(marker_id, Haplotype) %>%
+  count() %>% 
+  ungroup() %>% 
+  arrange(desc(n)) %>% 
+  mutate(Haplotype = factor(Haplotype, levels = Haplotype[order(n, decreasing = TRUE)]))
+ 
+  Hap_freq_Chr09_SI<-
+  hap_SI_epi %>%
+  filter(marker_id == "Chr09") %>%
+  group_by(marker_id, Haplotype) %>%
+  count() %>% 
+  ungroup() %>% 
+  arrange(desc(n)) %>% 
+  mutate(Haplotype = factor(Haplotype, levels = Haplotype[order(n, decreasing = TRUE)]))
+  
+  Hap_freq_Chr02_SI<-
+  hap_SI_epi %>%
+  filter(marker_id == "Chr02") %>%
+  group_by(marker_id, Haplotype) %>%
+  count() %>% 
+  ungroup() %>% 
+  arrange(desc(n)) %>% 
+  mutate(Haplotype = factor(Haplotype, levels = Haplotype[order(n, decreasing = TRUE)]))
+  
+  Hap_freq_Chr14_SI<-
+  hap_SI_epi %>%
+  filter(marker_id == "Chr14") %>%
+  group_by(marker_id, Haplotype) %>%
+  count() %>% 
+  ungroup() %>% 
+  arrange(desc(n)) %>% 
+  mutate(Haplotype = factor(Haplotype, levels = Haplotype[order(n, decreasing = TRUE)]))
+  
+  Hap_freq_Chr13_SI<-
+  hap_SI_epi %>%
+  filter(marker_id == "Chr13") %>%
+  group_by(marker_id, Haplotype) %>%
+  count() %>% 
+  ungroup() %>% 
+  arrange(desc(n)) %>% 
+  mutate(Haplotype = factor(Haplotype, levels = Haplotype[order(n, decreasing = TRUE)]))
+ 
+  Hap_freq_Chr01_SI<-
+  hap_SI_epi %>%
+  filter(marker_id == "Chr01") %>%
+  group_by(marker_id, Haplotype) %>%
+  count() %>% 
+  ungroup() %>% 
+  arrange(desc(n)) %>% 
+  mutate(Haplotype = factor(Haplotype, levels = Haplotype[order(n, decreasing = TRUE)]))
+  
+  Hap_freq_Chr11_SI<-
+  hap_SI_epi %>%
+  filter(marker_id == "Chr11") %>%
+  group_by(marker_id, Haplotype) %>%
+  count() %>% 
+  ungroup() %>% 
+  arrange(desc(n)) %>% 
+  mutate(Haplotype = factor(Haplotype, levels = Haplotype[order(n, decreasing = TRUE)]))
+  
+  Hap_freq_Chr08_SI<-
+  hap_SI_epi %>%
+  filter(marker_id == "Chr08") %>%
+  group_by(marker_id, Haplotype) %>%
+  count() %>% 
+  ungroup() %>% 
+  arrange(desc(n)) %>% 
+  mutate(Haplotype = factor(Haplotype, levels = Haplotype[order(n, decreasing = TRUE)]))
+  
+  Hap_freq_Chr03_SI<-
+  hap_SI_epi %>%
+  filter(marker_id == "Chr03") %>%
+  group_by(marker_id, Haplotype) %>%
+  count() %>% 
+  ungroup() %>% 
+  arrange(desc(n)) %>% 
+  mutate(Haplotype = factor(Haplotype, levels = Haplotype[order(n, decreasing = TRUE)]))
+ 
+ Hap_freq_Chr10_SI<-
+  hap_SI_epi %>%
+  filter(marker_id == "Chr10") %>%
+  group_by(marker_id, Haplotype) %>%
+  count() %>% 
+  ungroup() %>% 
+  arrange(desc(n)) %>% 
+  mutate(Haplotype = factor(Haplotype, levels = Haplotype[order(n, decreasing = TRUE)]))
+
+ 
+colourChr5_SI = length(unique(Hap_freq_Chr05_SI$Haplotype))
+getPaletteChr5_SI = colorRampPalette(brewer.pal(11, "RdGy")) 
+ 
+Hap_freq_Chr05_SI_plot<-
+Hap_freq_Chr05_SI %>%
+   ggplot() +
+   geom_col(aes(marker_id, (n/sum(n)), fill = Haplotype), col = 'black',
+            position = "fill")+
+  ggtitle("")+ scale_fill_manual(values = getPaletteChr5_SI(colourChr5_SI)) +
+  ylab("    ") + ggtitle("Solomon Islands")+
+  xlab("")+
+  coord_flip()+
+  theme_minimal(base_family = "", base_size = 12)+ 
+  theme(legend.position ="none", axis.text.x = element_blank(), axis.ticks = element_blank()) 
+  
+
+colourChr2_SI = length(unique(Hap_freq_Chr02_SI$Haplotype))
+getPaletteChr2_SI = colorRampPalette(brewer.pal(9, "Set1"))  
+ 
+Hap_freq_Chr02_SI_plot <-
+ Hap_freq_Chr02_SI %>%
+   ggplot() +
+   geom_col(aes(marker_id, (n/sum(n)), fill = Haplotype), col = 'black',
+            position = "fill")+
+  ggtitle("")+ scale_fill_manual(values = getPaletteChr2_SI(colourChr2_SI)) +
+  ylab("    ") +
+  xlab("")+
+  coord_flip()+
+  theme_minimal(base_family = "", base_size = 12)+ 
+  theme(legend.position ="none", axis.text.x = element_blank(), axis.ticks = element_blank()) 
+
+colourChr7_SI = length(unique(Hap_freq_Chr07_SI$Haplotype))
+getPaletteChr7_SI = colorRampPalette(brewer.pal(12, "Paired"))
+ 
+Hap_freq_Chr07_SI_plot <-
+ Hap_freq_Chr07_SI %>%
+   ggplot(aes(x = marker_id, y = (n/sum(n)), fill = Haplotype)) +
+   geom_col(col = 'black',
+            position = "fill", stat = "identity")+
+  ggtitle("")+ scale_fill_manual(values = getPaletteChr7_SI(colourChr7_SI)) +
+  ylab(" ") +
+  xlab(" ")+
+  coord_flip()+
+  theme_minimal(base_family = "", base_size = 12)+ 
+  theme(legend.position ="none", axis.text.x = element_blank(), axis.ticks = element_blank()) 
+
+colourChr14_SI = length(unique(Hap_freq_Chr14_SI$Haplotype))
+getPaletteChr14_SI = colorRampPalette(brewer.pal(7, "Dark2"))  
+
+ Hap_freq_Chr14_SI_plot <-
+ Hap_freq_Chr14_SI %>%
+   ggplot() +
+   geom_col(aes(marker_id, (n/sum(n)), fill = Haplotype), col = 'black',
+            position = "fill")+
+  ggtitle("")+ scale_fill_manual(values = getPaletteChr14_SI(colourChr14_SI)) +
+  ylab("    ") +
+  xlab("")+
+  coord_flip()+
+  theme_minimal(base_family = "", base_size = 12)+ 
+  theme(legend.position ="none", axis.text.x = element_blank(), axis.ticks = element_blank()) 
+
+colourChr9_SI = length(unique(Hap_freq_Chr09_SI$Haplotype))
+getPaletteChr9_SI = colorRampPalette(brewer.pal(8, "YlGnBu"))  
+
+ Hap_freq_Chr09_SI_plot <-
+ Hap_freq_Chr09_SI %>%
+   ggplot() +
+   geom_col(aes(marker_id, (n/sum(n)), fill = Haplotype), col = 'black',
+            position = "fill")+
+  ggtitle("")+ scale_fill_manual(values = getPaletteChr9_SI(colourChr9_SI)) +
+  ylab("    ") +
+  xlab("")+
+  coord_flip()+
+  theme_minimal(base_family = "", base_size = 12)+ 
+  theme(legend.position ="none",  axis.text.x = element_blank(), axis.ticks = element_blank())  
+ 
+colourChr13_SI = length(unique(Hap_freq_Chr13_SI$Haplotype))
+getPaletteChr13_SI = colorRampPalette(brewer.pal(5, "Set2"))  
+
+ Hap_freq_Chr13_SI_plot <-
+ Hap_freq_Chr13_SI %>%
+   ggplot() +
+   geom_col(aes(marker_id, (n/sum(n)), fill = Haplotype), col = 'black',
+            position = "fill")+
+  ggtitle("")+ scale_fill_manual(values = getPaletteChr13_SI(colourChr13_SI)) +
+  ylab("    ") +
+  xlab("")+
+  coord_flip()+
+   theme_minimal(base_family = "", base_size = 12)+ 
+  theme(legend.position ="none", axis.text.x = element_blank(), axis.ticks = element_blank()) 
+
+ 
+colourChr10_SI = length(unique(Hap_freq_Chr10_SI$Haplotype))
+getPaletteChr10_SI = colorRampPalette(brewer.pal(7, "Set3"))  
+
+ Hap_freq_Chr10_SI_plot <-
+ Hap_freq_Chr10_SI %>%
+   ggplot() +
+   geom_col(aes(marker_id, (n/sum(n)), fill = Haplotype), col = 'black',
+            position = "fill")+
+  ggtitle("")+ scale_fill_manual(values = getPaletteChr10_SI(colourChr10_SI)) +
+  ylab("    ") +
+  xlab("")+
+  coord_flip()+
+   theme_minimal(base_family = "", base_size = 12)+ 
+  theme(legend.position ="none", axis.text.x = element_blank(), axis.ticks = element_blank()) 
+
+colourChr03_SI = length(unique(Hap_freq_Chr03_SI$Haplotype))
+getPaletteChr03_SI = colorRampPalette(brewer.pal(6, "PuOr"))  
+
+ Hap_freq_Chr03_SI_plot <-
+ Hap_freq_Chr03_SI %>%
+   ggplot() +
+   geom_col(aes(marker_id, (n/sum(n)), fill = Haplotype), col = 'black',
+            position = "fill")+
+  ggtitle("")+ scale_fill_manual(values = getPaletteChr03_SI(colourChr03_SI)) +
+  ylab("    ") +
+  xlab("")+
+  coord_flip()+
+ theme_minimal(base_family = "", base_size = 12)+ 
+  theme(legend.position ="none", axis.text.x = element_blank(), axis.ticks = element_blank()) 
+
+ 
+colourChr11_SI = length(unique(Hap_freq_Chr11_SI$Haplotype))
+getPaletteChr11_SI = colorRampPalette(brewer.pal(3, "PiYG"))  
+
+ Hap_freq_Chr11_SI_plot <-
+ Hap_freq_Chr11_SI %>%
+   ggplot() +
+   geom_col(aes(marker_id, (n/sum(n)), fill = Haplotype), col = 'black',
+            position = "fill")+
+  ggtitle("")+ scale_fill_manual(values = getPaletteChr11_SI(colourChr11_SI)) +
+  ylab("    ") +
+  xlab("")+
+  coord_flip()+
+ theme_minimal(base_family = "", base_size = 12)+ 
+  theme(legend.position ="none", axis.text.x = element_blank(), axis.ticks = element_blank()) 
+
+ 
+colourChr1_SI = length(unique(Hap_freq_Chr01_SI$Haplotype))
+getPaletteChr1_SI = colorRampPalette(brewer.pal(5, "BrBG"))  
+
+ Hap_freq_Chr01_SI_plot <-
+ Hap_freq_Chr01_SI %>%
+   ggplot() +
+   geom_col(aes(marker_id, (n/sum(n)), fill = Haplotype), col = 'black',
+            position = "fill")+
+  ggtitle("")+ scale_fill_manual(values = getPaletteChr1_SI(colourChr1_SI)) +
+  ylab("    ") +
+  xlab("")+
+  coord_flip()+
+ theme_minimal(base_family = "", base_size = 12)+ 
+  theme(legend.position ="none", axis.text.x = element_blank(), axis.ticks = element_blank()) 
+
+ 
+colourChr8_SI = length(unique(Hap_freq_Chr08_SI$Haplotype))
+getPaletteChr8_SI = colorRampPalette(brewer.pal(2, "Accent"))  
+
+ Hap_freq_Chr08_SI_plot <-
+ Hap_freq_Chr08_SI %>%
+   ggplot() +
+   geom_col(aes(marker_id, (n/sum(n)), fill = Haplotype), col = 'black',
+            position = "fill")+
+  ggtitle("")+ scale_fill_manual(values = getPaletteChr8_SI(colourChr8_SI)) +
+  ylab("Haplotype frequency") +
+  xlab("")+
+  coord_flip()+
+  theme_minimal(base_family = "", base_size = 12)+ 
+  theme(legend.position ="none",  axis.ticks = element_blank(),
+        axis.title = element_text(size = 12)) 
+
+```
+
+#Haplotype frequencies in Peru
+```{r }
+
+Hap_freq_Chr07_PE<-
+ hap_PE_epi  %>% 
+  filter(marker_id == "Chr07") %>%
+  group_by(marker_id, haplotype) %>%
+  count() %>% 
+  ungroup() %>% 
+  arrange(desc(n)) %>% 
+  mutate(Haplotype = factor(haplotype, levels = haplotype[order(n, decreasing = TRUE)]))
+
+ Hap_freq_Chr05_PE<-
+  hap_PE_epi %>%
+  filter(marker_id == "Chr05") %>%
+  group_by(marker_id, haplotype) %>%
+  count() %>% 
+  ungroup() %>% 
+  arrange(desc(n)) %>% 
+  mutate(Haplotype = factor(haplotype, levels = haplotype[order(n, decreasing = TRUE)]))
+ 
+  Hap_freq_Chr09_PE<-
+  hap_PE_epi %>%
+  filter(marker_id == "Chr09") %>%
+  group_by(marker_id, haplotype) %>%
+  count() %>% 
+  ungroup() %>% 
+  arrange(desc(n)) %>% 
+  mutate(Haplotype = factor(haplotype, levels = haplotype[order(n, decreasing = TRUE)]))
+  
+  Hap_freq_Chr02_PE<-
+  hap_PE_epi %>%
+  filter(marker_id == "Chr02") %>%
+  group_by(marker_id, haplotype) %>%
+  count() %>% 
+  ungroup() %>% 
+  arrange(desc(n)) %>% 
+  mutate(Haplotype = factor(haplotype, levels = haplotype[order(n, decreasing = TRUE)]))
+  
+  Hap_freq_Chr14_PE<-
+  hap_PE_epi %>%
+  filter(marker_id == "Chr14") %>%
+  group_by(marker_id, haplotype) %>%
+  count() %>% 
+  ungroup() %>% 
+  arrange(desc(n)) %>% 
+  mutate(Haplotype = factor(haplotype, levels = haplotype[order(n, decreasing = TRUE)]))
+  
+Hap_freq_Chr13_PE<-
+  hap_PE_epi %>%
+  filter(marker_id == "Chr13") %>%
+  group_by(marker_id, haplotype) %>%
+  count() %>% 
+  ungroup() %>% 
+  arrange(desc(n)) %>% 
+  mutate(Haplotype = factor(haplotype, levels = haplotype[order(n, decreasing = TRUE)]))
+ 
+  Hap_freq_Chr01_PE<-
+  hap_PE_epi %>%
+  filter(marker_id == "Chr01") %>%
+  group_by(marker_id, haplotype) %>%
+  count() %>% 
+  ungroup() %>% 
+  arrange(desc(n)) %>% 
+  mutate(Haplotype = factor(haplotype, levels = haplotype[order(n, decreasing = TRUE)]))
+  
+  Hap_freq_Chr11_PE<-
+  hap_PE_epi %>%
+  filter(marker_id == "Chr11") %>%
+  group_by(marker_id, haplotype) %>%
+  count() %>% 
+  ungroup() %>% 
+  arrange(desc(n)) %>% 
+  mutate(Haplotype = factor(haplotype, levels = haplotype[order(n, decreasing = TRUE)]))
+  
+  Hap_freq_Chr08_PE<-
+  hap_PE_epi %>%
+  filter(marker_id == "Chr08") %>%
+  group_by(marker_id, haplotype) %>%
+  count() %>% 
+  ungroup() %>% 
+  arrange(desc(n)) %>% 
+  mutate(Haplotype = factor(haplotype, levels = haplotype[order(n, decreasing = TRUE)]))
+  
+  Hap_freq_Chr03_PE<-
+  hap_PE_epi %>%
+  filter(marker_id == "Chr03") %>%
+  group_by(marker_id, haplotype) %>%
+  count() %>% 
+  ungroup() %>% 
+  arrange(desc(n)) %>% 
+  mutate(Haplotype = factor(haplotype, levels = haplotype[order(n, decreasing = TRUE)]))
+ 
+ Hap_freq_Chr10_PE<-
+  hap_PE_epi %>%
+  filter(marker_id == "Chr10") %>%
+  group_by(marker_id, haplotype) %>%
+  count() %>% 
+  ungroup() %>% 
+  arrange(desc(n)) %>% 
+  mutate(Haplotype = factor(haplotype, levels = haplotype[order(n, decreasing = TRUE)]))
+
+ 
+colourChr5_PE = length(unique(Hap_freq_Chr05_PE$Haplotype))
+getPaletteChr5_PE = colorRampPalette(brewer.pal(11, "RdGy")) 
+ 
+Hap_freq_Chr05_PE_plot<-
+Hap_freq_Chr05_PE %>%
+   ggplot() +
+   geom_col(aes(marker_id, (n/sum(n)), fill = Haplotype), col = 'black',
+            position = "fill")+
+  ggtitle("")+ scale_fill_manual(values = getPaletteChr5_PE(colourChr5_PE)) +
+  ylab("    ") +
+  xlab("")+ ggtitle("Peru") +
+  coord_flip()+
+  theme_minimal(base_family = "", base_size = 12)+ 
+  theme(legend.position ="none", axis.text.x = element_blank(), axis.ticks = element_blank()) 
+  
+
+colourChr2_PE = length(unique(Hap_freq_Chr02_PE$Haplotype))
+getPaletteChr2_PE = colorRampPalette(brewer.pal(9, "Set1"))  
+ 
+Hap_freq_Chr02_PE_plot <-
+ Hap_freq_Chr02_PE %>%
+   ggplot() +
+   geom_col(aes(marker_id, (n/sum(n)), fill = Haplotype), col = 'black',
+            position = "fill")+
+  ggtitle("")+ scale_fill_manual(values = getPaletteChr2_PE(colourChr2_PE)) +
+  ylab("    ") +
+  xlab("")+
+  coord_flip()+
+  theme_minimal(base_family = "", base_size = 12)+ 
+  theme(legend.position ="none", axis.text.x = element_blank(), axis.ticks = element_blank()) 
+
+colourChr7_PE = length(unique(Hap_freq_Chr07_PE$Haplotype))
+getPaletteChr7_PE = colorRampPalette(brewer.pal(12, "Paired"))
+ 
+Hap_freq_Chr07_PE_plot <-
+ Hap_freq_Chr07_PE %>%
+   ggplot(aes(x = marker_id, y = (n/sum(n)), fill = Haplotype)) +
+   geom_col(col = 'black',
+            position = "fill", stat = "identity")+
+  ggtitle("")+ scale_fill_manual(values = getPaletteChr7_PE(colourChr7_PE)) +
+  ylab(" ") +
+  xlab(" ")+
+  coord_flip()+
+  theme_minimal(base_family = "", base_size = 12)+ 
+  theme(legend.position ="none", axis.text.x = element_blank(), axis.ticks = element_blank()) 
+
+colourChr14_PE = length(unique(Hap_freq_Chr14_PE$Haplotype))
+getPaletteChr14_PE = colorRampPalette(brewer.pal(7, "Dark2"))  
+
+ Hap_freq_Chr14_PE_plot <-
+ Hap_freq_Chr14_PE %>%
+   ggplot() +
+   geom_col(aes(marker_id, (n/sum(n)), fill = Haplotype), col = 'black',
+            position = "fill")+
+  ggtitle("")+ scale_fill_manual(values = getPaletteChr14_PE(colourChr14_PE)) +
+  ylab("    ") +
+  xlab("")+
+  coord_flip()+
+  theme_minimal(base_family = "", base_size = 12)+ 
+  theme(legend.position ="none", axis.text.x = element_blank(), axis.ticks = element_blank()) 
+
+colourChr9_PE = length(unique(Hap_freq_Chr09_PE$Haplotype))
+getPaletteChr9_PE = colorRampPalette(brewer.pal(8, "YlGnBu"))  
+
+ Hap_freq_Chr09_PE_plot <-
+ Hap_freq_Chr09_PE %>%
+   ggplot() +
+   geom_col(aes(marker_id, (n/sum(n)), fill = Haplotype), col = 'black',
+            position = "fill")+
+  ggtitle("")+ scale_fill_manual(values = getPaletteChr9_PE(colourChr9_PE)) +
+  ylab("    ") +
+  xlab("")+
+  coord_flip()+
+  theme_minimal(base_family = "", base_size = 12)+ 
+  theme(legend.position ="none",  axis.text.x = element_blank(), axis.ticks = element_blank())  
+ 
+colourChr13_PE = length(unique(Hap_freq_Chr13_PE$Haplotype))
+getPaletteChr13_PE = colorRampPalette(brewer.pal(8, "Set2"))  
+
+ Hap_freq_Chr13_PE_plot <-
+ Hap_freq_Chr13_PE %>%
+   ggplot() +
+   geom_col(aes(marker_id, (n/sum(n)), fill = Haplotype), col = 'black',
+            position = "fill")+
+  ggtitle("")+ scale_fill_manual(values = getPaletteChr13_PE(colourChr13_PE)) +
+  ylab("    ") +
+  xlab("")+
+  coord_flip()+
+   theme_minimal(base_family = "", base_size = 12)+ 
+  theme(legend.position ="none", axis.text.x = element_blank(), axis.ticks = element_blank()) 
+
+ 
+colourChr10_PE = length(unique(Hap_freq_Chr10_PE$Haplotype))
+getPaletteChr10_PE = colorRampPalette(brewer.pal(7, "Set3"))  
+
+Hap_freq_Chr10_PE_plot <-
+ Hap_freq_Chr10_PE %>%
+   ggplot() +
+   geom_col(aes(marker_id, (n/sum(n)), fill = Haplotype), col = 'black',
+            position = "fill")+
+  ggtitle("")+ scale_fill_manual(values = getPaletteChr10_PE(colourChr10_PE)) +
+  ylab("Haplotype frequency") +
+  xlab("")+
+  coord_flip()+
+   theme_minimal(base_family = "", base_size = 12)+ 
+  theme(legend.position ="none", axis.ticks = element_blank(),
+        axis.title =element_text(size = 12)) 
+
+colourChr03_PE = length(unique(Hap_freq_Chr03_PE$Haplotype))
+getPaletteChr03_PE = colorRampPalette(brewer.pal(6, "PuOr"))  
+
+ Hap_freq_Chr03_PE_plot <-
+ Hap_freq_Chr03_PE %>%
+   ggplot() +
+   geom_col(aes(marker_id, (n/sum(n)), fill = Haplotype), col = 'black',
+            position = "fill")+
+  ggtitle("")+ scale_fill_manual(values = getPaletteChr03_PE(colourChr03_PE)) +
+  ylab("    ") +
+  xlab("")+
+  coord_flip()+
+ theme_minimal(base_family = "", base_size = 12)+ 
+  theme(legend.position ="none", axis.text.x = element_blank(), axis.ticks = element_blank()) 
+
+ 
+colourChr11_PE = length(unique(Hap_freq_Chr11_PE$Haplotype))
+getPaletteChr11_PE = colorRampPalette(brewer.pal(7, "PiYG"))  
+
+ Hap_freq_Chr11_PE_plot <-
+ Hap_freq_Chr11_PE %>%
+   ggplot() +
+   geom_col(aes(marker_id, (n/sum(n)), fill = Haplotype), col = 'black',
+            position = "fill")+
+  ggtitle("")+ scale_fill_manual(values = getPaletteChr11_PE(colourChr11_PE)) +
+  ylab("    ") +
+  xlab("")+
+  coord_flip()+
+ theme_minimal(base_family = "", base_size = 12)+ 
+  theme(legend.position ="none", axis.text.x = element_blank(), axis.ticks = element_blank()) 
+
+ 
+colourChr1_PE = length(unique(Hap_freq_Chr01_PE$Haplotype))
+getPaletteChr1_PE = colorRampPalette(brewer.pal(5, "BrBG"))  
+
+ Hap_freq_Chr01_PE_plot <-
+ Hap_freq_Chr01_PE %>%
+   ggplot() +
+   geom_col(aes(marker_id, (n/sum(n)), fill = Haplotype), col = 'black',
+            position = "fill")+
+  ggtitle("")+ scale_fill_manual(values = getPaletteChr1_PE(colourChr1_PE)) +
+  ylab("    ") +
+  xlab("")+
+  coord_flip()+
+ theme_minimal(base_family = "", base_size = 12)+ 
+  theme(legend.position ="none", axis.text.x = element_blank(), axis.ticks = element_blank()) 
+
+ 
+colourChr8_PE = length(unique(Hap_freq_Chr08_PE$Haplotype))
+getPaletteChr8_PE = colorRampPalette(brewer.pal(11, "Accent"))  
+
+Hap_freq_Chr08_PE_plot <-
+ Hap_freq_Chr08_PE %>%
+   ggplot() +
+   geom_col(aes(marker_id, (n/sum(n)), fill = Haplotype), col = 'black',
+            position = "fill")+
+  ggtitle("")+ scale_fill_manual(values = getPaletteChr8_PE(colourChr8_PE)) +
+  ylab("") +
+  xlab("")+
+  coord_flip()+
+  theme_minimal(base_family = "", base_size = 12)+ 
+  theme(legend.position ="none",  axis.text.x = element_blank(), axis.ticks = element_blank()) 
+
+```
+
+#MOI all samples SI
+```{r ,echo=FALSE, message=FALSE, warning=FALSE}
+
+haplotypes_all_samples_SI<-
+  hap_SI_epi %>%
+  inner_join(baseline_patients, by = c("info")) %>%
+  left_join(follow_patients, by = c("info", "sample")) %>%
+  inner_join(MOI_max_SI, by = "sample") %>% 
+  inner_join(he_marker_SI, by = "marker_id")%>%
+  mutate(max_moi = as.factor(max_moi)) %>%
+  ggplot(aes(x = sample, y = Frequency ,fill = Haplotype), col = 'black') +
+  geom_bar(position = "stack", stat = "identity")+ 
+  ylab("Within-host frequency (%)") + xlab("Multiplicity of infection")+ ggtitle("Solomon Islands")+ 
+  scale_colour_manual(values = rainbow(101)) +
+  theme_classic(base_size = 10) + 
+  theme(legend.position ="none", axis.text.y = element_text(face = "plain", color="black", size = 4, angle = 0), axis.text.x = element_blank(), axis.ticks = element_blank(), 
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        strip.text.y = element_text(size = 3),
+        strip.text.x = element_text(size = 5),
+        panel.spacing = unit(.2, "lines"),
+        panel.border = element_rect(colour = "black", fill = NA)) +
+  scale_y_continuous( breaks = seq(0,1,0.5)) + facet_grid(fct_reorder(marker_id, he, .desc = TRUE) ~ max_moi, 
+                                                          scales = "free", space = "free", 
+                                                          drop = TRUE) 
+
+print(haplotypes_all_samples_SI)  
+
+```
+#MOI all samples PE
+```{r ,echo=FALSE, message=FALSE, warning=FALSE}
+haplotypes_all_samples_PE<-
+  hap_PE_epi%>%
+  left_join(MOI_max_PE, by = c("sample")) %>%
+  inner_join(he_marker_PE, by = "marker_id")%>%
+   mutate(max_moi = as.factor(max_moi)) %>%
+  ggplot(aes(x = sample, y = frequency ,fill = haplotype), col = 'black') +
+  geom_bar(position = "stack", stat = "identity")+ 
+  ylab("") + xlab("Multiplicity of infection")+ ggtitle("Peru")+ scale_colour_manual(values = rainbow(101)) +
+  theme_classic(base_size = 10) + 
+  theme(legend.position ="none", axis.text.y = element_text(face = "plain", color="black", size = 4, angle = 0), axis.text.x = element_blank(), axis.ticks = element_blank(), 
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        strip.text.y = element_text(size = 3),
+        strip.text.x = element_text(size = 5),
+        panel.spacing = unit(.2, "lines"),
+        panel.border = element_rect(colour = "black", fill = NA)) +
+  scale_y_continuous( breaks = seq(0,1,0.5)) + facet_grid(fct_reorder(marker_id, he, .desc = TRUE) ~ max_moi, 
+                                                          scales = "free", space = "free", 
+                                                          drop = TRUE) 
+print(haplotypes_all_samples_PE)  
+```
+
+#Figure 4
+```{r }
+r <- ggdraw() +
+  draw_plot(he_marker_SI_plot, x = 0,y = 0.5, width = .25, height = .47)+
+  draw_plot(he_marker_PE_plot, x = .25,y = 0.5, width = .25, height = .47)+
+  draw_plot(Hap_freq_Chr05_SI_plot, x = 0.5, y = .860, width = .25, height = .13) +
+  draw_plot(Hap_freq_Chr02_SI_plot, x = 0.5, y = .827, width = .25, height = .13) +
+  draw_plot(Hap_freq_Chr07_SI_plot, x = 0.5, y = .794, width = .25, height = .13) +
+  draw_plot(Hap_freq_Chr14_SI_plot, x = 0.5, y = .761, width = .25, height = .13) +
+  draw_plot(Hap_freq_Chr09_SI_plot, x = 0.5, y = .728, width = .25, height = .13) +
+  draw_plot(Hap_freq_Chr13_SI_plot, x = 0.5, y = .695, width = .25, height = .13) +
+  draw_plot(Hap_freq_Chr10_SI_plot, x = 0.5, y = .662, width = .25, height = .13) +
+  draw_plot(Hap_freq_Chr03_SI_plot, x = 0.5, y = .629, width = .25, height = .13) +
+  draw_plot(Hap_freq_Chr11_SI_plot, x = 0.5, y = .596, width = .25, height = .13) +
+  draw_plot(Hap_freq_Chr01_SI_plot, x = 0.5, y = .563, width = .25, height = .13) +
+  draw_plot(Hap_freq_Chr08_SI_plot, x = 0.5, y = .51, width = .25, height = .15) +
+  draw_plot(Hap_freq_Chr05_PE_plot, x = .75, y = .860, width = .25, height = .13) +
+  draw_plot(Hap_freq_Chr11_PE_plot, x = .75, y = .827, width = .25, height = .13) +
+  draw_plot(Hap_freq_Chr07_PE_plot, x = .75, y = .794, width = .25, height = .13) +
+  draw_plot(Hap_freq_Chr08_PE_plot, x = .75, y = .761, width = .25, height = .13) +
+  draw_plot(Hap_freq_Chr13_PE_plot, x = .75, y = .728, width = .25, height = .13) +
+  draw_plot(Hap_freq_Chr02_PE_plot, x = .75, y = .695, width = .25, height = .13) +
+  draw_plot(Hap_freq_Chr09_PE_plot, x = .75, y = .662, width = .25, height = .13) +
+  draw_plot(Hap_freq_Chr14_PE_plot, x = .75, y = .629, width = .25, height = .13) +
+  draw_plot(Hap_freq_Chr03_PE_plot, x = .75, y = .596, width = .25, height = .13) +
+  draw_plot(Hap_freq_Chr01_PE_plot, x = .75, y = .563, width = .25, height = .13) +
+  draw_plot(Hap_freq_Chr10_PE_plot, x = .75, y = .51, width = .25, height = .15) +
+  draw_plot(haplotypes_all_samples_SI, x = .0, y = 0, width = .34, height = .51) +
+  draw_plot(haplotypes_all_samples_PE, x = .335, y = 0, width = .34, height = .51) +
+  draw_plot(MOI_day0_dayX_paired, x = .68, y = .0, width = .32, height = .47)+
+  draw_plot_label(label = c("A", "C", "B", "D"), size = 12,
+                 x = c(0, 0, .5,.68  ), y = c(1,.53 ,1, .53))
+print(r)
+ggsave("figs/figure4.tiff", units="cm", width=30, height=18, dpi=300, compression = 'lzw')
+```
+```{r echo=F, eval=F}
+save.image("./intermediate_data/intermediate_data.RData")
+```

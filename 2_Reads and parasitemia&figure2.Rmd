@@ -1,0 +1,291 @@
+---
+title: "Reads and parasitemia"
+author: "Jason_Rosado"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide 
+    code_download: true
+    fig_width: 8
+    fig_height: 6
+    theme: cosmo
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, 
+                      warning = FALSE, 
+                      message = FALSE, 
+                      tidy = TRUE,
+                      fig.width = 8, 
+                      fig.height = 6)
+library(tidyverse)
+library(here)
+library(RColorBrewer) 
+library(ggpubr)
+library(cowplot)
+library(ggh4x)
+library(table1)
+library(tableone) 
+```
+
+```{r echo=FALSE, message=F, warning=F}
+load("./intermediate_data/intermediate_data.RData")
+```
+
+
+## Figure [**Reads and parasitemia**]
+```{r, echo=FALSE}
+########################
+# Summary of number    #           
+# of reads per sample  #
+########################
+hap_SI_epi %>% 
+  select(count)%>% 
+summarise_at(vars(count), 
+             list(min = min,Q1=~quantile(., probs = 0.25),
+                    median=median, Q3=~quantile(., probs = 0.75),
+                    max=max,mean = mean)) 
+
+###################################
+# Summary of number               #
+# of reads per marker per sample  #
+###################################
+hap_SI_epi %>% group_by(marker_id) %>%
+  select(marker_id, count)%>% 
+summarise_at(vars(count), 
+             list(min = min,Q1=~quantile(., probs = 0.25),
+                    median=median, Q3=~quantile(., probs = 0.75),
+                    max=max,mean = mean)) 
+
+########################
+# Summary of number    #           
+# of reads per sample  #
+########################
+hap_PE_epi %>% 
+  select(count)%>% 
+summarise_at(vars(count), 
+             list(min = min,Q1=~quantile(., probs = 0.25),
+                    median=median, Q3=~quantile(., probs = 0.75),
+                    max=max,mean = mean)) 
+
+###################################
+# Summary   of number             #
+# of reads per marker per sample  #
+###################################
+hap_PE_epi %>% group_by(marker_id) %>%
+  select(marker_id, count)%>% 
+summarise_at(vars(count), 
+             list(min = min,Q1=~quantile(., probs = 0.25),
+                    median=median, Q3=~quantile(., probs = 0.75),
+                    max=max,mean = mean)) 
+
+```
+
+```{r, warning=FALSE}
+
+######
+# SI #
+######
+mean_reads_parasite_SI <- 
+  hap_SI_epi%>%
+   group_by(sample) %>%
+  mutate(reads_mean = mean(count),
+         copies_ul = as.numeric(copies_ul),
+         parasites_ul = copies_ul/3) %>% 
+  select(sample, copies_ul, Cq,parasites_ul,reads_mean)%>%   
+    group_by(sample) %>% 
+  distinct() 
+
+#Example
+cor.test(mean_reads_parasite_SI$parasites_ul, mean_reads_parasite_SI$reads_mean)
+
+reads_parasite_per_marker_SI <- 
+  hap_SI_epi %>%
+   group_by(sample) %>%
+  mutate(reads_mean = mean(count),
+         copies_ul = as.numeric(copies_ul),
+         parasites_ul = copies_ul/3) %>% 
+  select(sample, marker_id, copies_ul, Cq,parasites_ul,count,reads_mean)%>%   
+    group_by(marker_id) %>% 
+  distinct() 
+
+#Correlation parasite density and reads
+cor.test(reads_parasite_per_marker_SI$parasites_ul[reads_parasite_per_marker_SI$marker_id=="Chr05"], reads_parasite_per_marker_SI$count[reads_parasite_per_marker_SI$marker_id=="Chr05"])
+
+
+########
+# Peru #
+########
+
+mean_reads_parasite_PE <- 
+  hap_PE_epi %>%
+  group_by(sample) %>%
+  mutate(reads_mean = mean(count),
+         copies_ul = as.numeric(copies_ul)) %>% 
+  select(sample, copies_ul, parasites_uL, Cq,reads_mean,marker_id)%>%   
+    group_by(sample) %>% 
+  distinct() 
+
+#Example
+cor.test(mean_reads_parasite_PE$parasites_uL, mean_reads_parasite_PE$reads_mean)
+
+reads_parasite_per_marker_PE<- hap_PE_epi %>%
+   group_by(sample) %>%
+  mutate(reads_mean = mean(count),
+         copies_ul = as.numeric(copies_ul)) %>% 
+  select(sample, copies_ul, parasites_uL, Cq,count,reads_mean,marker_id)%>%      group_by(marker_id) %>% 
+  distinct() 
+
+#Correlation parasite density and reads
+cor.test(reads_parasite_per_marker_PE$parasites_uL[reads_parasite_per_marker_PE$marker_id=="Chr05"],reads_parasite_per_marker_PE$count[reads_parasite_per_marker_PE$marker_id=="Chr05"])
+
+```
+##Plotting number of reads per marker
+```{r, echo=FALSE,message=FALSE, warning=FALSE}
+
+# Set colors for plot Parasite density and reads
+
+colour_markers <- c("#E0E0E0", "#B1E4E4", "#75B2B7", 
+                     "#459CC1",
+                    "#0C666E","#E2CABC",
+                    "#F37777","#FF9933", "#ED8707","#AE8873",
+                    "#BA6C17","#733C03") 
+
+#SI READS VS MARKER
+numberreads_sample_SI<- hap_SI_epi %>% group_by(marker_id) %>%
+  select(marker_id, count)%>% 
+  ggplot(aes(x = marker_id, y = count, fill=marker_id)) +
+  geom_boxplot()+
+  scale_y_log10(breaks = c(10,100,1000,10000),
+                 label = c("10", "100", "1000", "10000")) +
+  ylab("Number of reads") + xlab("Solomon Islands") +
+  scale_fill_manual(values = colour_markers) +
+  theme_bw(base_size = 12) + 
+  theme(axis.text.x = element_text(face = "plain", color="black", size = 8, angle = 15), legend.position = "none") + coord_flip()
+
+# PE READS VS MARKER
+
+numberreads_sample_PE<- hap_PE_epi %>% group_by(marker_id) %>%
+  select(marker_id, count) %>% 
+  ggplot(aes(x = marker_id, y = count, fill=marker_id)) +
+  geom_boxplot()+
+  scale_y_log10(breaks = c(10,100,1000,10000),
+                 label = c("10", "100", "1000", "10000")) +
+  ylab("Number of reads") + xlab("Peru") +
+  scale_fill_manual(values = colour_markers) +
+  theme_bw(base_size = 12) + 
+  theme(axis.text.x = element_text(face = "plain", color="black", size = 8, angle = 15), legend.position = "none")+ coord_flip() 
+
+##########################
+# Selecting variables for# 
+# combine both databases #
+##########################
+
+reads_parasites_samples_SI<- hap_SI_epi %>%
+ group_by(sample, marker_id, copies_ul) %>%
+  mutate(site = "SI",
+         copies_ul = as.numeric(copies_ul))%>%
+  select(sample, marker_id, count,copies_ul, site)%>%
+  distinct()
+
+reads_parasites_samples_PE<- hap_PE_epi %>%
+   group_by(sample, marker_id, copies_ul) %>%
+  mutate(site = "PE",
+         copies_ul = as.numeric(copies_ul))%>%
+  select(sample, marker_id,count, copies_ul, site) %>%
+  distinct()
+
+###########
+# PLOT    #
+###########
+
+colour_countries <-c("#F37777","#459CC1")
+
+reads_parasites_samples_both<- reads_parasites_samples_SI %>%
+  bind_rows(reads_parasites_samples_PE) %>%
+mutate(  parasites_ul = copies_ul/3,
+         par_ul_cat = cut(parasites_ul, breaks = c(-Inf,10,100,1000,10000,Inf)))%>% 
+group_by(site, sample, marker_id, par_ul_cat) %>%   
+           summarise(total_reads = sum(count)) %>% 
+  ggplot() +
+  geom_boxplot(aes(x = par_ul_cat, y = total_reads, fill=site))+ 
+  scale_x_discrete(breaks=c("(-Inf,10]","(10,100]", "(100,1e+03]","(1e+03,1e+04]","(1e+04, Inf]"),
+                    labels=c("[0.1,10]","(10,100]","(100,1000]","(1000,10000]","(10000+]"))+
+      scale_y_log10(breaks = c(10,100,1000,10000),
+                 label = c("10", "100", "1000", "10000")) +
+  ylab("Number of reads") + xlab("parasites/uL") +
+  scale_fill_manual(values = colour_countries) +
+  theme_bw(base_size = 12) + 
+  theme(axis.text.x = element_text(face = "plain", color="black", size = 8, angle = 90), legend.position = "bottom")+
+  facet_wrap(~ marker_id, ncol = 4)
+  
+reads_parasites_samples_both$data %>% group_by(par_ul_cat) %>%
+  select(total_reads)%>% 
+summarise_at(vars(total_reads), 
+             list(min = min,Q1=~quantile(., probs = 0.25),
+                    median=median, Q3=~quantile(., probs = 0.75),
+                    max=max,mean = mean))
+
+#############################################
+#                                           #
+# SERIAL DILUTION OF CONTROL SAMPLE AT WEHI #
+#                                           #
+#############################################
+
+serial_dilutions <-readRDS(here("raw_data", "mix_infections_seq_tbl.rds"))
+
+serial_dilutions<- serial_dilutions %>%
+  filter(sample %in% c("AR246_802","AR246_80", "AR246_40", "AR246_8","AR246_4", "AR246_08"),
+         status %in% c("failed_dada", "pass", "low_sample_count")) %>%
+  group_by(sample, marker_id, info, status) %>%
+  mutate(info = as.numeric(info),
+          count = replace_na(count,10000),
+         status = case_when(status == "failed_dada" ~ "Failed",
+                            status == "pass" ~ "Passed",
+                            status == "low_sample_count" ~ "Low count"))%>%
+  summarise(total_reads = sum(count)) %>%
+  arrange(desc(info)) 
+
+
+serial_dilutions$info <- factor(serial_dilutions$info,
+                                        levels = c("802","80.2","40.1","8.02","4.01","0.8"))
+
+reads_parasites_controls <- serial_dilutions%>%
+  ggplot(aes(x = as.factor(marker_id), y = total_reads, fill = status)) +
+  geom_bar(position = "dodge", stat = "identity", colour ="black") + 
+  scale_fill_manual(values = c("Passed" = "#459CC1","Failed" = "#E0E0E0","Low count"= "#FF9933"))+
+  ylab("Number of reads") + xlab(" ") + 
+  theme_bw(base_size = 12) + 
+  theme(legend.position = "bottom", axis.text.x = element_text(face = "plain", color="black", size = 8, angle = 90),
+        strip.text.x = element_text(size = 10, color = "black")) +
+  scale_y_log10(breaks = c(10,100,1000,10000, 100000),
+                label = c("10", "100", "1000", "10000", "100000")) +
+  facet_wrap(~ info, labeller = labeller(info = c("802"="267 p/uL","80.2"="27 p/uL","40.1"="13 p/uL","8.02"="2.7 p/uL","4.01" = "1.34 p/uL", "0.8"="0.27 p/uL")),
+             ncol = 3) 
+```
+
+```{r, echo=FALSE, message=FALSE}
+figure2 <- ggdraw() +
+draw_plot(numberreads_sample_SI, x = 0.005,y = 0.5, width = .23, height = 0.49) +
+draw_plot(reads_parasites_controls, x = 0.005,y = 0, width = .46, height = 0.48) +
+draw_plot(numberreads_sample_PE, x = 0.238,y = 0.5, width = .23, height = 0.49) +
+draw_plot(reads_parasites_samples_both, x =0.47,y = 0, width = .53, height = 0.99) +
+draw_plot_label(label = c("A", "C", "B"), size = 12,
+                 x = c(0, 0, 0.47), y = c(1, 0.5, 1))
+  
+  
+draw_plot_label(label = c("A", "B", "C", "D"), size = 12,
+                 x = c(0, 0, 0.165,0.59 ), y = c(1, 0.5, 1, 1))
+
+
+print(figure2)
+
+ggsave("figs/figure2.tiff", units="cm", width=36, height=18, dpi=300, compression = 'lzw')
+
+```
+
+```{r echo=F, eval=F}
+save.image("./intermediate_data/intermediate_data.RData")
+```

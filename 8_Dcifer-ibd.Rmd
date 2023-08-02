@@ -1,0 +1,568 @@
+---
+title: "Dcifer IBD estimates"
+author: "Shazia Ruybal-Pesántez"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide 
+    code_download: true
+    fig_width: 8
+    fig_height: 6
+    theme: cosmo
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, 
+                      warning = FALSE, 
+                      message = FALSE, 
+                      tidy = TRUE,
+                      fig.width = 8, 
+                      fig.height = 6)
+                      # fig.path = here::here("figures/"),
+                      # dev = "png",
+                      # dpi = 300)
+
+library(tidyverse)
+library(here)
+library(dcifer)
+library(viridis)
+library(tidygraph) # for creating graph object
+library(ggraph) # for plotting network
+library(janitor)
+library(ggpubr)
+```
+
+# Background
+This notebook documents the process to calculate genetic relatedness (identity-by-descent, IBD) accounting for multiplicity of infection (MOI) using the [`dcifer` package](https://eppicenter.github.io/dcifer/articles/vigArticle.html) ([Gerlovina et al 2022](https://doi.org/10.1093/genetics/iyac126)). We apply this approach to *Pv* AmpSeq assay data performed on samples from Solomon Islands (ACT-Radical clinical trail) and Peru (ICEMR community surveys). 
+
+**More info on datasets:**
+
+- Solomon Islands ACT-Radical: these samples are from a drug treatment clinical trial containing 3 arms: AL, AL-PQ, DHP-PQ. Samples were down-selected from participants with recurrent infections after drug treatment (from all 3 arms), so the sample set includes samples from D0 (i.e. baseline) and for some participants also follow-up samples when they experienced recurrent *Pv* infections as detected by qPCR (in some instances there are multiple follow-up samples from a given participant). 
+- Peru ICEMR: these samples are from community surveys conducted in Lupuana and Cahuide. Samples were downselected from participants with recurrent infections over the course of 1 year (late 2014-2015), so the sample set includes samples from participants and in some instances multiple samples from the same participants. 
+
+**IBD calculation:**
+
+The IBD measurement outputs from `dcifer` include pairwise IBD (`r^`), 95% CI and p-values for each pairwise comparison (where IBD>0). For significant pairwise comparisons, another output metric that can be calculated is `r^total`, which allows for multiple pairs of strains to be related between two infections. As described by [Gerlovina et al 2022](https://doi.org/10.1093/genetics/iyac126), `r^total` is a more informative metric as it describes total relatedness in the case of MOI>1. 
+
+Note: the IBD estimation code presented here largely follows the [`dcifer` vignette](https://eppicenter.github.io/dcifer/articles/vigArticle.html).
+
+# Analysis
+## Data preparation
+
+```{r load data}
+sols_data <- readRDS(here("intermediate_data", "sols_data_merged.rds"))
+peru_data <- readRDS(here("intermediate_data", "peru_data_merged.rds"))
+```
+
+Keep only variables needed for `dcifer` input format (minimum needed: `sample`, `locus`, `allele` + any relevant metadata variables).
+```{r}
+sols_temp <- sols_data %>% select(sample, marker_id, haplotype = Haplotype, redcap_event_name, trt_label)
+
+peru_temp <- peru_data %>% select(sample_id, patient_id = PatientName, marker_id, haplotype, mm_aa,date)
+```
+
+## Solomon Islands IBD `r^`
+
+### `dcifer` IBD calculations
+Create data frame for `dcifer` using the `formatDat` function.
+```{r curate sols data}
+dsmp <- formatDat(sols_temp, svar = "sample", lvar = "marker_id", avar = "haplotype")
+```
+
+We estimate COI using the `getCOI` function and using naive estimation. 
+```{r estimate coi sols}
+lrank <- 2
+coi <- getCOI(dsmp, lrank = lrank)
+```
+
+Based on this estimation, there were `r 135-83` (`r round((1-(84/137))*100)`%) samples with COI>1. See all COI values below: 
+```{r}
+coi %>% 
+  as.data.frame() %>% 
+  set_names("coi") %>% 
+  tabyl(coi) %>% 
+  adorn_totals("row") %>%
+  adorn_pct_formatting(digits = 2) 
+```
+
+We estimate pop-level allele frequencies using the `calcAfreq` function and adjusting for COI.
+```{r estimate freq sols}
+afreq <- calcAfreq(dsmp, coi, tol = 1e-5) 
+# str(afreq, list.len = 2)
+```
+
+We estimate relatedness (`r^`) using the `ibdDat` function. Here we assume only one pair of strains between two infections can be related (`M`=1, ie assuming MOI=1 for every sample pair).
+```{r}
+dres <- ibdDat(dsmp, coi, afreq, pval = TRUE, confint = TRUE, rnull = 0, 
+               alpha = 0.05, nr = 1e3)     
+```
+
+#### Pairwise matrix of IBD estimates
+```{r}
+
+# create symmetric matrix
+dmat <- dres[, , "estimate"]
+dmat[upper.tri(dmat)] <- t(dmat)[upper.tri(t(dmat))] 
+
+# determine significant, indices for upper triangle
+alpha <- 0.05                          # significance level                    
+isig <- which(dres[, , "p_value"] <= alpha, arr.ind = TRUE)
+
+```
+
+#### Pairwise matrix of IBD estimates, lower triangle shows IBD estimates (`r^`) and the upper triangle shows the corresponding p-values:
+```{r}
+# p-values for upper triangle
+pmat <- matrix(NA, length(dsmp), length(dsmp))
+pmat[upper.tri(pmat)] <- t(log(dres[, , "p_value"]))[upper.tri(pmat)]
+pmat[pmat == -Inf] <- min(pmat[is.finite(pmat)])#*1.2
+#plotRel(pmat, rlim = NULL, draw_diag = TRUE, col = hcl.colors(101, "Red-Purple"), 
+#        sig = FALSE, add = TRUE, col_diag = "white", border_diag = "gray45")
+
+# plotColorbar()
+```
+
+
+### Other visualizations
+We reshape the matrix to long format so that we can plot other visualizations. 
+```{r}
+# IBD estimate
+dmat1 <- dmat
+diag(dmat1) <- NA
+dmat1[upper.tri(dmat1)] <- NA
+sols_ibd_est <- data.frame(sampleid1 = rownames(dmat1)[row(dmat1)], 
+                           sampleid2= colnames(dmat1)[col(dmat1)], 
+                           estimate = c(dmat1))
+sols_ibd_est <- na.omit(sols_ibd_est)
+
+# p-value
+pmat1 <- dres[, , "p_value"]
+sols_ibd_pval <- data.frame(sampleid1 = rownames(pmat1)[row(pmat1)], 
+                            sampleid2 = colnames(pmat1)[col(pmat1)], 
+                            p_value = c(pmat1))
+sols_ibd_pval <- na.omit(sols_ibd_pval)
+
+# CI lower
+clmat1 <- dres[, , "CI_lower"]
+sols_ibd_cl <- data.frame(sampleid1 = rownames(clmat1)[row(clmat1)], 
+                          sampleid2 = colnames(clmat1)[col(clmat1)], 
+                          CI_lower = c(clmat1))
+sols_ibd_cl <- na.omit(sols_ibd_cl)
+
+# CI upper
+cumat1 <- dres[, , "CI_upper"]
+sols_ibd_cu <- data.frame(sampleid1 = rownames(cumat1)[row(cumat1)], 
+                          sampleid2 = colnames(cumat1)[col(cumat1)], 
+                          CI_upper = c(cumat1))
+sols_ibd_cu <- na.omit(sols_ibd_cu)
+
+
+# Merge all 
+sols_ibd <- sols_ibd_est %>% left_join(sols_ibd_pval) %>% left_join(sols_ibd_cl) %>% left_join(sols_ibd_cu)
+```
+#### The box plot below shows the distribution of the significant `r^` values (*note: the points are jittered*):
+```{r}
+sols_ibd %>% 
+  filter(p_value < alpha) %>% # 491 sig  
+  ggplot(aes(x = "", y = estimate)) +
+    geom_jitter(alpha=0.5) +
+    geom_boxplot(alpha=0.5, outlier.shape=NA) +
+    theme_minimal()
+```
+
+## Peru IBD `r^`
+
+### `dcifer` IBD calculations
+
+Create data frame for dcifer using the `formatDat` function, as per above.
+```{r create dcifer df peru}
+dsmp_pe <- formatDat(peru_temp, svar = "sample_id", lvar = "marker_id", avar = "haplotype")
+```
+
+We estimate COI using the `getCOI` function and using naive estimation.
+```{r estimate coi peru}
+# lrank <- 2
+coi_pe <- getCOI(dsmp_pe, lrank = lrank)
+```
+
+Based on this estimation, there were `r 140-94` (`r round((1-(54/140))*100)`%) samples with COI>1. See all COI values below: 
+```{r}
+coi_pe %>% 
+  as.data.frame() %>% 
+  set_names("coi") %>% 
+  tabyl(coi) %>% 
+  adorn_totals("row") %>%
+  adorn_pct_formatting(digits = 2) 
+```
+
+We estimate pop-level allele frequencies using the `calcAfreq` function and adjusting for COI.
+```{r estimate freq peru}
+afreq_pe <- calcAfreq(dsmp_pe, coi_pe, tol = 1e-5) 
+# str(afreq_pe, list.len = 2)
+```
+
+We estimate relatedness (`r^`) using the `ibdDat` function. Here we assume only one pair of strains between two infections can be related (`M`=1, ie assuming MOI=1 for every sample pair).
+```{r}
+dres_pe <- ibdDat(dsmp_pe, coi_pe, afreq_pe, pval = TRUE, confint = TRUE, rnull = 0, 
+               alpha = 0.05, nr = 1e3)     
+```
+
+#### Pairwise matrix of IBD estimates
+```{r}
+# create symmetric matrix
+dmat_pe <- dres_pe[, , "estimate"]
+dmat_pe[upper.tri(dmat_pe)] <- t(dmat_pe)[upper.tri(t(dmat_pe))] 
+
+# determine significant, indices for upper triangle
+# alpha <- 0.05                          # significance level                    
+isig_pe <- which(dres_pe[, , "p_value"] <= alpha, arr.ind = TRUE)
+```
+
+#### Pairwise matrix of IBD estimates
+```{r}
+# p-values for upper triangle
+pmat_pe <- matrix(NA, length(dsmp_pe), length(dsmp_pe))
+pmat_pe[upper.tri(pmat_pe)] <- t(log(dres_pe[, , "p_value"]))[upper.tri(pmat_pe)]
+pmat_pe[pmat_pe == -Inf] <- min(pmat_pe[is.finite(pmat_pe)])
+
+```
+
+
+We reshape the matrix to long format so that we can plot other visualizations.
+```{r}
+# IBD estimate
+dmat1_pe <- dmat_pe
+diag(dmat1_pe) <- NA
+dmat1_pe[upper.tri(dmat1_pe)] <- NA
+peru_ibd_est <- data.frame(sampleid1 = rownames(dmat1_pe)[row(dmat1_pe)], 
+                           sampleid2 = colnames(dmat1_pe)[col(dmat1_pe)], 
+                           estimate = c(dmat1_pe))
+peru_ibd_est <- na.omit(peru_ibd_est)
+
+# p-value
+pmat1_pe <- dres_pe[, , "p_value"]
+peru_ibd_pval <- data.frame(sampleid1 = rownames(pmat1_pe)[row(pmat1_pe)], 
+                            sampleid2 = colnames(pmat1_pe)[col(pmat1_pe)], 
+                            p_value = c(pmat1_pe))
+peru_ibd_pval <- na.omit(peru_ibd_pval)
+
+# CI lower
+clmat1_pe <- dres_pe[, , "CI_lower"]
+peru_ibd_cl <- data.frame(sampleid1 = rownames(clmat1_pe)[row(clmat1_pe)], 
+                          sampleid2 = colnames(clmat1_pe)[col(clmat1_pe)], 
+                          CI_lower = c(clmat1_pe))
+peru_ibd_cl <- na.omit(peru_ibd_cl)
+
+# CI upper
+cumat1_pe <- dres_pe[, , "CI_upper"]
+peru_ibd_cu <- data.frame(sampleid1 = rownames(cumat1_pe)[row(cumat1_pe)], 
+                          sampleid2 = colnames(cumat1_pe)[col(cumat1_pe)], 
+                          CI_upper = c(cumat1_pe))
+peru_ibd_cu <- na.omit(peru_ibd_cu)
+
+
+# Merge all 
+peru_ibd <- peru_ibd_est %>% left_join(peru_ibd_pval) %>% left_join(peru_ibd_cl) %>% left_join(peru_ibd_cu)
+```
+#### The box plot below shows the distribution of the significant `r^` values (*note: the points are jittered*):
+```{r}
+peru_ibd %>% 
+  filter(p_value < alpha) %>%   
+  ggplot(aes(x = "", y = estimate)) +
+    geom_jitter(alpha=0.5) +
+    geom_boxplot(alpha=0.5, outlier.shape=NA) +
+    theme_minimal()
+```
+
+### Solomon Islands
+We create nodes and edges data frames so we can create the network object. The `id` variable links both together. The nodes can contain any metadata relevant to our analysis, here we explore whether timepoint (D0 vs follow-up), paired/non-paired, treatment arm may explain relatedness patterns. 
+```{r}
+sols_nodes <- sols_data %>% 
+                select(sample, redcap_event_name, trt_label, mean_moi, max_moi, episodes) %>%
+                distinct() %>% 
+                mutate(patient_id = substr(sample, 4, 6),
+                       id = 1:n()) 
+
+sols_edges <- sols_ibd %>% left_join(sols_nodes %>% select(sample, id), by = c("sampleid1" = "sample")) %>% rename(id.x = id)
+
+sols_edges <- sols_edges %>% left_join(sols_nodes %>% select(sample, id), by = c("sampleid2" = "sample")) %>% rename(id.y = id)
+
+```
+
+
+### Peru
+We create nodes and edges data frames so we can create the network object. The `id` variable links both together. The nodes can contain any metadata relevant to our analysis, here we explore whether timepoint (1st vs recurrent infection), paired/non-paired, same home vs different home, may explain relatedness patterns. 
+```{r}
+peru_nodes <- peru_data %>% 
+                select(sample_id, patient_id = PatientName, mean_moi, max_moi,  episodes,  date, mm_aa) %>%
+                distinct() %>% 
+                mutate(id = 1:n(),
+                       date = as.Date(date, "%m/%d/%Y")) %>% 
+                # group by patient ID here so we can create an infection_number variable
+                group_by(patient_id) %>% 
+                mutate(infection_num = rank(date)) %>% 
+                ungroup()
+      
+
+peru_edges <- peru_ibd %>% left_join(peru_nodes %>% select(sample_id, id), by = c("sampleid1" = "sample_id")) %>% rename(id.x = id)
+
+peru_edges <- peru_edges %>% left_join(peru_nodes %>% select(sample_id, id), by = c("sampleid2" = "sample_id")) %>% rename(id.y = id)
+```
+
+
+## Thoughts on estimating `r^ total`
+Here it is important to note that one of the "defining assumptions" of the IBD estimation approach in `dcifer` is an assumption of no intra-host relatedness. In `dcifer` `r^total` is calculated by allowing multiple pairs of strains to be related between two infections (`M'`>1), such that the number of positively related strain pairs is also calculated (`M'`). `r^total` can be calculated using two methods:
+
+1. *model without constraint:* assuming strains are not equal to each other r1!=...!=rn , this is denoted with the `equalr=FALSE` argument. **I believe this is the most appropriate for our purposes.**
+2. *model with constraint:* assuming strains are equal to each other r1=...=rn, this is denoted with the `equalr=TRUE` argument.
+
+## Solomon Islands IBD `r^ total`
+```{r eval=F}
+sols_nodes %>% tabyl(max_moi)
+1-0.197
+```
+Based on MOI estimated by our AmpSeq panel data, we expect approximately 80% of samples to be MOI>1 (max MOI=4) and based on naive COI estimations here, we expect approximately 60% of samples to be MOI>1 (maxMOI=4). Therefore we calculate `r^total` to account for MOI and the possibility of multiple strains being related between complex infections. 
+
+We create a grid of `r^` values to permute over.
+```{r}
+revals <- mapply(generateReval, 1:5, nr = c(1e3, 1e2, 32, 16, 12))
+```
+
+We calculate `r^total` using the two methods. Results will have either 1 or 2 appended, respectively. 
+
+1. *model without constraint:* assuming strains are not equal to each other r1!=...!=rn , this is denoted with the `equalr=FALSE` argument. **I believe this is the most appropriate for our purposes.**
+2. *model with constraint:* assuming strains are equal to each other r1=...=rn, this is denoted with the `equalr=TRUE` argument.
+```{r}
+sig1 <- sig2 <- vector("list", nrow(isig))
+for (i in 1:nrow(isig)) {
+  sig1[[i]] <- ibdEstM(dsmp[isig[i, ]], coi[isig[i, ]], afreq, Mmax = 5, 
+                       equalr = FALSE, reval = revals)
+}
+for (i in 1:nrow(isig)) {
+  sig2[[i]] <- ibdEstM(dsmp[isig[i, ]], coi[isig[i, ]], afreq, equalr = TRUE)
+}
+M1      <- sapply(sig1, function(r) sum(r > 0))  
+M2      <- sapply(sig2, length)          
+rtotal1 <- sapply(sig1, sum)    
+rtotal2 <- sapply(sig2, sum)    
+```
+
+We check the overall correlation of estimated `M` based on both methods:
+```{r}
+cor(M1, M2)         
+```
+
+We check the overall correlation of estimated `r^total` based on both methods:
+```{r}
+cor(rtotal1, rtotal2) 
+```
+
+Now we create a list of the significant pairs: 
+```{r}
+samples <- names(dsmp)
+sig <- as.data.frame(isig, row.names = FALSE)
+sig[c("sampleid1", "sampleid2")]         <- list(samples[isig[, 1]], samples[isig[, 2]])
+sig[c("M1", "M2")]           <- list(M1, M2)
+sig[c("rtotal1", "rtotal2")] <- list(round(rtotal1, 3), round(rtotal2, 3))
+
+# head(sig)
+```
+There are `r nrow(sig)` significant pairwise comparisons, with `r^total` ranging from `r sig %>% summarise(min(rtotal1)) %>% as.numeric()` to `r sig %>% summarise(max(rtotal1)) %>% as.numeric()` (mean= `r sig %>% summarise(mean(rtotal1)) %>% as.numeric()`; median= `r sig %>% summarise(median(rtotal1)) %>% as.numeric()`). There are `r sig %>% filter(rtotal1>1) %>% nrow()` significant pairwise comparisons with `r^total`>1. 
+
+
+For downstream analyses we will use the results from method 1 (ie no constraint).
+
+## Peru IBD `r^ total`
+```{r eval=F}
+peru_nodes %>% tabyl(max_moi)
+1-0.15
+```
+Based on MOI estimated by our AmpSeq panel data, we expect approximately 85% of samples to be MOI>1 (max MOI=5) and based on naive COI estimations here, we expect approximately 61% of samples to be MOI>1 (max MOI=3). Therefore we calculate `r^total` to account for MOI and the possibility of multiple strains being related between complex infections.
+
+We created a grid of `r^` values to permute over above (`revals`), which we will use below.
+```{r}
+#revals <- mapply(generateReval, 1:5, nr = c(1e3, 1e2, 32, 16, 12))
+```
+
+We calculate `r^total` using the two methods. Results will have either 1 or 2 appended, respectively.
+
+- *model without constraint:* assuming strains are not equal to each other r1!=…!=rn , this is denoted with the `equalr=FALSE` argument. **I believe this is the most appropriate for our purposes.**
+- *model with constraint:* assuming strains are equal to each other r1=…=rn, this is denoted with the `equalr=TRUE` argument.
+```{r}
+sig1_pe <- sig2_pe <- vector("list", nrow(isig_pe))
+for (i in 1:nrow(isig_pe)) {
+  sig1_pe[[i]] <- ibdEstM(dsmp_pe[isig_pe[i, ]], coi_pe[isig_pe[i, ]], afreq_pe, Mmax = 5, 
+                       equalr = FALSE, reval = revals)
+}
+for (i in 1:nrow(isig_pe)) {
+  sig2_pe[[i]] <- ibdEstM(dsmp_pe[isig_pe[i, ]], coi_pe[isig_pe[i, ]], afreq_pe, equalr = TRUE)
+}
+M1_pe      <- sapply(sig1_pe, function(r) sum(r > 0))  
+M2_pe      <- sapply(sig2_pe, length)          
+rtotal1_pe <- sapply(sig1_pe, sum)    
+rtotal2_pe <- sapply(sig2_pe, sum)    
+```
+
+We check the overall correlation of estimated `M` based on both methods:
+```{r}
+cor(M1_pe, M2_pe)         
+```
+
+We check the overall correlation of estimated `r^total` based on both methods:
+```{r}
+cor(rtotal1_pe, rtotal2_pe) 
+```
+
+Now we create a list of the significant pairs:
+```{r}
+samples_pe <- names(dsmp_pe)
+sig_pe <- as.data.frame(isig_pe, row.names = FALSE)
+sig_pe[c("sampleid1", "sampleid2")]         <- list(samples_pe[isig_pe[, 1]], samples_pe[isig_pe[, 2]])
+sig_pe[c("M1", "M2")]           <- list(M1_pe, M2_pe)
+sig_pe[c("rtotal1", "rtotal2")] <- list(round(rtotal1_pe, 3), round(rtotal2_pe, 3))
+
+# head(sig_pe)
+```
+There are `r nrow(sig_pe)` significant pairwise comparisons, with `r^total` ranging from `r sig_pe %>% summarise(min(rtotal1)) %>% as.numeric()` to `r sig_pe %>% summarise(max(rtotal1)) %>% as.numeric()` (mean= `r sig_pe %>% summarise(mean(rtotal1)) %>% as.numeric()`; median= `r sig_pe %>% summarise(median(rtotal1)) %>% as.numeric()`). There are `r sig_pe %>% filter(rtotal1>1) %>% nrow()` significant pairwise comparisons with `r^total`>1. 
+
+For downstream analyses we will use the results from method 1 (ie no constraint).
+
+### Solomon Islands
+We create nodes and edges data frames as per above, but using `r^total` estimates.
+```{r}
+# note sols_nodes created above in first relatedness network section
+
+sols_edges_sig <- sig %>% left_join(sols_nodes %>% select(sample, id), by = c("sampleid1" = "sample")) %>% rename(id.x = id)
+
+sols_edges_sig <- sols_edges_sig %>% left_join(sols_nodes %>% select(sample, id), by = c("sampleid2" = "sample")) %>% rename(id.y = id)
+
+#sols_tidy_sig <- tbl_graph(nodes = sols_nodes, edges = sols_edges_sig, directed = T)
+```
+
+
+### Peru
+We create nodes and edges data frames as per above, but using `r^total` estimates.
+```{r}
+# note peru_nodes created above in first relatedness network section
+
+peru_edges_sig <- sig_pe %>% left_join(peru_nodes %>% select(sample_id, id), by = c("sampleid1" = "sample_id")) %>% rename(id.x = id)
+
+peru_edges_sig <- peru_edges_sig %>% left_join(peru_nodes %>% select(sample_id, id), by = c("sampleid2" = "sample_id")) %>% rename(id.y = id)
+
+#peru_tidy_sig <- tbl_graph(nodes = peru_nodes, edges = peru_edges_sig, directed = T)
+```
+
+
+# Cross-checking results
+
+## Checking `r^` significant vs non-significant pw comparisons 
+We would expect that significant pairwise comparisons should be IBD>0 and non-significant pairwise comparisons should include IBD=0, sanity check is below. 
+
+### Solomon Islands
+First we save a list of all sample pairs that had significant IBD. 
+```{r}
+sols_sig_pairs <- sols_edges_sig %>% mutate(pair = paste(sampleid1,"/", sampleid2)) %>% select(pair)
+```
+
+Next we create a dataframe with IBD estimates (in this case the `sols_edges` dataframe with `r^`), and also create metadata variables for more details on the epi for each pairwise comparison:
+
+- `patientid1` and `patientid2` will allow us to determine paired samples from the same individual
+- `dayid1` and `dayid2` will give us information about D0 and follow-up samples and also the time since treatment
+- `comparison_type` to filter paired and not paired sample comparisons
+- `pair` to be able to subset and/or merge with the list of sig IBD sample pairs created above)
+- `sig_est` to filter significant vs non-significant pairwise comparisons
+```{r}
+sols_all_meta <- sols_edges %>% mutate(patientid1 = substr(sampleid1, 4, 6),
+                                       patientid2 = substr(sampleid2, 4, 6),
+                                       day_id1 = substr(sampleid1, 8, n()),
+                                       day_id2 = substr(sampleid2, 8, n()),
+                                       comparison_type = case_when(patientid1 == patientid2 ~ "paired",
+                                                                   patientid1 != patientid2 ~ "not paired",
+                                                                   TRUE ~ "check"),
+                                       pair = paste(sampleid1,"/", sampleid2),
+                                       sig_est = case_when((pair %in% sols_sig_pairs$pair) ~ "significant",
+                                                           TRUE ~ "not significant")) %>% 
+                               select(sampleid1, sampleid2, estimate, p_value, CI_lower, CI_upper, patientid1, patientid2, day_id1, day_id2, comparison_type, pair, sig_est) 
+
+# tabyl(sols_all_meta$comparison_type)
+# sols_all_meta %>% tabyl(comparison_type, sig_est)
+# sols_all_meta %>% tabyl(comparison_type, sig_est) %>% chisq.test()
+```
+
+### Peru
+First we save a list of all sample pairs that had significant IBD.
+```{r}
+peru_sig_pairs <- peru_edges_sig %>% mutate(pair = paste(sampleid1,"/", sampleid2)) %>% select(pair)
+```
+
+Next we create a dataframe with IBD estimates (in this case the `peru_edges` dataframe with `r^`), and also create metadata variables for more details on the epi for each pairwise comparison:
+
+- `patientid1` and `patientid2` will allow us to determine paired samples from the same individual
+- `date1` and `date2` will give us information about when samples were collected (can also be used to determine the 1st infection for a particular individual)
+- `comparison_type` to filter paired and not paired sample comparisons
+- `pair` to be able to subset and/or merge with the list of sig IBD sample pairs created above)
+- `sig_est` to filter significant vs non-significant pairwise comparisons
+```{r}
+peru_all_meta <- peru_edges %>% left_join(peru_nodes %>% select(sampleid1 = sample_id, 
+                                                                patientid1 = patient_id, 
+                                                                date1 = date)) %>% 
+                                    left_join(peru_nodes %>% select(sampleid2 = sample_id, 
+                                                                    patientid2 = patient_id, 
+                                                                    date2 = date)) %>% 
+                                    mutate(comparison_type = case_when(patientid1 == patientid2 ~ "paired",
+                                                                       patientid1 != patientid2 ~ "not paired",
+                                                                       TRUE ~ "check"),
+                                           pair = paste(sampleid1,"/", sampleid2),
+                                           sig_est = case_when((pair %in% peru_sig_pairs$pair) ~ "significant",
+                                                               TRUE ~ "not significant")) %>% 
+                                    select(sampleid1, sampleid2, estimate, p_value, CI_lower, CI_upper, patientid1, patientid2, date1, date2, comparison_type, pair, sig_est)
+
+# tabyl(peru_all_meta$comparison_type)
+# peru_all_meta %>% tabyl(comparison_type, sig_est)
+# peru_all_meta %>% tabyl(comparison_type, sig_est) %>% chisq.test()
+```
+
+## Checking `r^total`significant pw comparisons: paired vs not paired samples
+We expect that `M'` should be positively related to `r^total`, sanity checks below.
+
+### Solomon Islands
+We create a similar dataframe as above but now with IBD estimates from the `sols_edges_sig` dataframe with `r^total` results, so only those that were significant.
+```{r}
+sols_sig_meta <- sols_edges_sig %>% mutate(patientid1 = substr(sampleid1, 4, 6),
+                                           patientid2 = substr(sampleid2, 4, 6),
+                                           day_id1 = substr(sampleid1, 8, n()),
+                                           day_id2 = substr(sampleid2, 8, n()),
+                                           comparison_type = case_when(patientid1 == patientid2 ~ "paired",
+                                                                       patientid1 != patientid2 ~ "not paired",
+                                                                       TRUE ~ "check")) %>% 
+                                    select(sampleid1, sampleid2, M1, rtotal1, patientid1, patientid2, day_id1, day_id2, comparison_type)
+
+# tabyl(sols_sig_meta$comparison_type)
+```
+
+### Peru
+We create a similar dataframe as above but now with IBD estimates from the `peru_edges_sig` dataframe with `r^total` results, so only those that were significant are included.
+```{r}
+peru_sig_meta <- peru_edges_sig %>% left_join(peru_nodes %>% select(sampleid1 = sample_id, 
+                                                                    patientid1 = patient_id, 
+                                                                    date1 = date)) %>% 
+                                    left_join(peru_nodes %>% select(sampleid2 = sample_id, 
+                                                                    patientid2 = patient_id, 
+                                                                    date2 = date)) %>% 
+                                    mutate(comparison_type = case_when(patientid1 == patientid2 ~ "paired",
+                                                                       patientid1 != patientid2 ~ "not paired",
+                                                                       TRUE ~ "check")) %>% 
+                                    select(sampleid1, sampleid2, M1, rtotal1, patientid1, patientid2, date1, date2, comparison_type)
+```
+
+```{r echo=F, eval=F}
+write_rds(sols_all_meta,"intermediate_data/sols_all_meta.rds", "xz")
+write_rds(sols_sig_meta,"intermediate_data/sols_sig_meta.rds", "xz") 
+
+write_rds(peru_all_meta,"intermediate_data/peru_all_meta.rds", "xz")
+write_rds(peru_sig_meta,"intermediate_data/peru_sig_meta.rds", "xz") 
+
+
+```

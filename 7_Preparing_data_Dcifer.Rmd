@@ -1,0 +1,78 @@
+---
+title: "Preparing_data_Dcifer"
+author: "Jason_Rosado"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide 
+    code_download: true
+    fig_width: 8
+    fig_height: 6
+    theme: cosmo
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, 
+                      warning = FALSE, 
+                      message = FALSE, 
+                      tidy = TRUE,
+                      fig.width = 8, 
+                      fig.height = 6)
+library(tidyverse)
+library(RColorBrewer) 
+library(ggpubr)
+library(cowplot)
+library(ggh4x)
+library(table1)
+library(tableone) 
+```
+
+
+```{r echo=FALSE, message=F, warning=F}
+load("./intermediate_data/intermediate_data.RData")
+```
+
+```{r Preparing data for Dcifer}
+merged_SI <- hap_SI_epi %>%
+  left_join(MOI_max_SI, by = c("sample")) %>%
+  left_join(he_marker_SI, by =c("marker_id"))%>%
+  left_join(patients_episodes_SI, by=c("info"))
+
+merged_PE <- hap_PE_epi %>%
+  left_join(MOI_max_PE, by = c("sample")) %>%
+  left_join(he_marker_PE, by =c("marker_id"))%>%
+  left_join(patients_episodes, by=c("PatientName")) %>%
+   mutate(mm_aa = case_when(aa == "2014" & mm == "12"~ "01",
+                           aa == "2015" & mm == "1"~ "02",
+                           aa == "2015" & mm == "2"~ "03",
+                           aa == "2015" & mm == "3"~ "04",
+                           aa == "2015" & mm == "4"~ "05",
+                           aa == "2015" & mm == "5"~ "06",
+                           aa == "2015" & mm == "6"~ "07",
+                           aa == "2015" & mm == "7"~ "08",
+                           aa == "2015" & mm == "8"~ "09",
+                           aa == "2015" & mm == "9"~ "10",
+                           aa == "2015" & mm == "10"~ "11",
+                           aa == "2015" & mm == "11"~ "12",
+                           aa == "2015" & mm == "12"~ "13"),
+    episodes = as.factor(episodes),
+         PatientName = gsub("[M1]","", PatientName)) 
+
+write_rds(merged_SI,"intermediate_data/sols_data_merged.rds", "xz")
+write_rds(merged_PE,"intermediate_data/peru_data_merged.rds", "xz")
+
+
+
+write_rds(dist_Haplo_class_SI_first_rec$data,"intermediate_data/sols_data_classification.rds", "xz")
+write_rds(dist_Haplo_class_PE_first_rec$data,"intermediate_data/peru_data_classification.rds", "xz")
+
+
+```
+
+
+```{r echo=FALSE, eval=F}
+save.image("./intermediate_data/intermediate_data.RData")
+```
+

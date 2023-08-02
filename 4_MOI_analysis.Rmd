@@ -1,0 +1,596 @@
+---
+title: "MOI"
+author: "Jason_Rosado"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide 
+    code_download: true
+    fig_width: 8
+    fig_height: 6
+    theme: cosmo
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, 
+                      warning = FALSE, 
+                      message = FALSE, 
+                      tidy = TRUE,
+                      fig.width = 8, 
+                      fig.height = 6)
+library(tidyverse)
+library(RColorBrewer) 
+library(ggpubr)
+library(cowplot)
+library(ggh4x)
+library(table1)
+library(tableone) 
+```
+
+```{r echo=FALSE, message=F, warning=F}
+load("./intermediate_data/intermediate_data.RData")
+```
+
+#MOI per sample and mean MOI per marker
+```{r, message=FALSE, warning=FALSE}
+
+#MOI IN SI
+
+MOI_marker_sample_SI <- 
+  hap_SI_epi %>% 
+  group_by(marker_id, sample) %>% 
+  summarise(n_hap = n_distinct(Haplotype)) %>%
+  group_by(marker_id, sample) 
+
+MOI_mean_by_marker_SI <-
+  MOI_marker_sample_SI %>%
+  group_by(marker_id) %>%
+  summarise(mean_moi = mean(n_hap), median_moi = median(n_hap), max_moi = max(n_hap)) %>%
+  arrange(desc(mean_moi))
+
+MOI_max_SI <- 
+  hap_SI_epi%>% 
+  group_by(follow,sample, marker_id) %>% 
+  summarise(n_hap = n_distinct(Haplotype)) %>%
+  summarise(mean_moi = mean(n_hap), median_moi = median(n_hap), max_moi = max(n_hap)) %>%
+  mutate(clones = case_when(max_moi =="1" ~ "mono",
+                             max_moi >"1" ~ "poly"))%>%
+  group_by(follow, sample) 
+
+
+table1(~as.factor(max_moi) + clones|follow, data =  MOI_max_SI, 
+       render.missing = NULL,
+       render.categorical = "FREQ (PCTnoNA%)",
+       render = rndr)
+
+table_max_moi_SI<- CreateTableOne(vars = c("max_moi","clones"), strata = "follow", data = MOI_max_SI, 
+               factorVars =c("clones"))
+
+print(table_max_moi_SI,showAllLevels = TRUE,
+      nonnormal = "max_moi")
+
+clonality_per_marker_SI<- hap_SI_epi %>% 
+  filter(!infoD == "0") %>%
+  group_by(marker_id, sample) %>% 
+  summarise(n_hap = n_distinct(Haplotype)) %>%
+  mutate(clones = case_when(n_hap =="1" ~ "mono",
+                             n_hap >"1" ~ "poly"))%>%
+  group_by(marker_id, clones) %>%
+  summarise(n = n())%>%
+  mutate(poly = (n*100 / sum(n)))
+
+
+# MOI IN PERU
+MOI_marker_sample_PE <- 
+  hap_PE_epi %>% 
+  inner_join(samples_sum_PE, by = c("sample","PatientName"))%>%
+  group_by(marker_id, sample, day) %>% 
+  summarise(n_hap = n_distinct(haplotype)) %>%
+  group_by(marker_id, sample) 
+
+MOI_mean_by_marker_PE <-
+  MOI_marker_sample_PE %>%
+  group_by(marker_id,day) %>%
+  summarise(mean_moi = mean(n_hap), median_moi = median(n_hap), max_moi = max(n_hap))%>%
+  arrange(desc(mean_moi))
+
+clonality_per_marker_PE<- hap_PE_epi %>% 
+  inner_join(samples_sum_PE, by = c("sample","PatientName"))%>%
+  group_by(marker_id, sample, day) %>% 
+  summarise(n_hap = n_distinct(haplotype)) %>%
+  mutate(clones = case_when(n_hap =="1" ~ "mono",
+                             n_hap >"1" ~ "poly"))%>%
+  group_by(day,marker_id, clones) %>%
+  summarise(n = n())%>%
+  mutate(poly = (n*100 / sum(n)))
+
+
+MOI_max_PE<-
+  hap_PE_epi %>% 
+  inner_join(samples_sum_PE, by = c("sample","PatientName")) %>%
+  group_by(day, sample, marker_id) %>% 
+  summarise(n_hap = n_distinct(haplotype)) %>%
+  summarise(mean_moi = mean(n_hap), median_moi = median(n_hap), max_moi = max(n_hap))%>%
+mutate(clones = case_when(max_moi =="1" ~ "mono",
+                             max_moi >"1" ~ "poly"))%>%
+  group_by(day, sample) 
+
+table1(~ as.factor(max_moi) + clones|day, data =  MOI_max_PE, 
+       render.missing = NULL,
+       render.categorical = "FREQ (PCTnoNA%)",
+       render = rndr)
+
+table_max_moi_PE<- CreateTableOne(vars = c("max_moi","clones"), strata = "day", data = MOI_max_PE, 
+               factorVars =c("clones"))
+
+print(table_max_moi_PE,showAllLevels = TRUE,
+      nonnormal = "max_moi")
+
+```
+
+##Correlation age and MOI Supp_figure3
+```{r, echo=FALSE}
+
+age_moi_SI<- hap_SI_epi %>% 
+  left_join(MOI_max_SI, by = c("sample")) %>%
+  filter(infoD == "0") %>%
+  select(age_y, max_moi, info) %>% distinct() %>%
+  ggplot() +
+  geom_point(aes(x = age_y, y = max_moi, color= info),
+             size = 2, alpha = 0.8) +
+  ggtitle("Solomon Islands") +
+  ylab("max MOI at the baseline") + xlab(" age (y)") +
+  scale_fill_brewer(palette="Paired") +
+  theme_classic(base_size = 12) + 
+  theme(axis.text.x = element_text(face = "plain", color="black", size = 8, angle = 90), legend.position = "none") 
+
+print(age_moi_SI)
+cor.test(age_moi_SI$data$max_moi, age_moi_SI$data$max_moi)
+
+table_age_moi_SI<- CreateTableOne(vars = c("max_moi","age_y"), strata = "max_moi", data = age_moi_SI$data, 
+               factorVars =c("max_moi"))
+
+print(table_age_moi_SI,showAllLevels = TRUE,
+      nonnormal = "age_y")
+
+
+age_moi_PE<- hap_PE_epi %>% 
+  left_join(MOI_max_PE, by = c("sample")) %>%
+  filter(day == "Day 0") %>%
+  select(age, max_moi, sample) %>% distinct() %>%
+  ggplot() +
+  geom_point(aes(x = age, y = max_moi, color= sample),
+             size = 2, alpha = 0.8) +
+  ggtitle("Peru") +
+  ylab("max MOI at the baseline") + xlab(" age (y)") +
+  scale_fill_brewer(palette="Paired") +
+  theme_classic(base_size = 12) + 
+  theme(axis.text.x = element_text(face = "plain", color="black", size = 8, angle = 90), legend.position = "none") 
+
+cor.test(age_moi_PE$data$max_moi, age_moi_PE$data$max_moi)
+
+table_age_moi_PE<- CreateTableOne(vars = c("max_moi","age"), strata = "max_moi", data = age_moi_PE$data, 
+               factorVars =c("max_moi"))
+
+print(table_age_moi_PE,showAllLevels = TRUE,
+      nonnormal = "age")
+
+Supp_figure3<-ggarrange(age_moi_SI, age_moi_PE,
+                              ncol=2, nrow=1, common.legend = F, legend="none")
+
+print(Supp_figure3)
+
+ggsave("figs/Supp_figure3.tiff", units="cm", width=12, height=8.12, dpi=300, compression = 'lzw')
+
+
+```
+
+##Distribution Symp_Asymp and MOI Supp_figure4
+```{r, echo=FALSE}
+  
+#######
+#     #
+# SI  #
+#######
+
+symp_moi_SI_hist <- hap_SI_epi %>% 
+  left_join(MOI_max_SI, by = c("sample"))%>%
+  select(sample,pv_clin,max_moi) %>%
+  filter(!is.na(pv_clin)) %>%
+  mutate(Symptoms = ifelse(pv_clin == 0,"Asym", "Sym"))%>%
+  distinct() %>%
+  ggplot(aes(x = as.numeric(max_moi), fill=Symptoms
+             )) +
+  geom_bar(position = position_dodge2(width = 0.9, preserve = "single")) + 
+  ggtitle("Solomon Islands") +
+  xlab("MOI") + ylab("Frequency") + 
+   coord_cartesian(ylim=c(0, 80))+
+  scale_fill_brewer(palette="Paired") +
+  theme_classic(base_size = 12) + 
+  theme(legend.position = "right") 
+
+moi_SI_hist <- hap_SI_epi %>% 
+  left_join(MOI_max_SI, by = c("sample"))%>%
+  select(sample,pv_clin,max_moi) %>%
+  filter(!is.na(pv_clin)) %>%
+  mutate(Symptoms = ifelse(pv_clin == 0,"Asym", "Sym"))%>%
+  distinct() %>%
+  ggplot(aes(x = as.numeric(max_moi))) +
+  geom_bar(position = position_dodge2(width = 0.9, preserve = "single")) + 
+  ggtitle("Solomon Islands") +
+  xlab("MOI") + ylab("Frequency") + 
+   coord_cartesian(ylim=c(0, 80))+
+  scale_fill_brewer(palette="Paired") +
+  theme_classic(base_size = 12) + 
+  theme(legend.position = "right") 
+
+table_sym_moi_SI<- CreateTableOne(vars = c("max_moi"), strata = "Symptoms", data = symp_moi_SI_hist$data, 
+               factorVars =c("Symptoms"))
+
+print(table_sym_moi_SI,showAllLevels = TRUE,
+      nonnormal = "max_moi")
+
+symp_moi_PE_hist <- hap_PE_epi %>% 
+  left_join(MOI_max_PE, by = c("sample")) %>%
+  select(sample,clinic_Pvinf,max_moi) %>%
+  filter(!is.na(clinic_Pvinf)) %>%
+  mutate(Symptoms = ifelse(clinic_Pvinf == 0,"Asym", "Sym"))%>%
+  distinct() %>%
+  ggplot(aes(x = as.numeric(max_moi), fill=Symptoms 
+             )) +
+  geom_bar(position = position_dodge2(width = 0.9, preserve = "single")) + 
+    ggtitle("Peru") +
+  xlab("MOI") + ylab("Frequency") + 
+  scale_fill_brewer(palette="Paired") +
+  coord_cartesian(ylim=c(0, 80))+
+  theme_classic(base_size = 12) + 
+  theme(legend.position = "right") 
+
+moi_PE_hist <- hap_PE_epi %>% 
+  left_join(MOI_max_PE, by = c("sample")) %>%
+  select(sample,clinic_Pvinf,max_moi) %>%
+  filter(!is.na(clinic_Pvinf)) %>%
+  mutate(Symptoms = ifelse(clinic_Pvinf == 0,"Asym", "Sym"))%>%
+  distinct() %>%
+  ggplot(aes(x = as.numeric(max_moi))) +
+  geom_bar(position = position_dodge2(width = 0.9, preserve = "single")) + 
+    ggtitle("Peru") +
+  xlab("MOI") + ylab("Frequency") + 
+  scale_fill_brewer(palette="Paired") +
+  coord_cartesian(ylim=c(0, 80))+
+  theme_classic(base_size = 12) + 
+  theme(legend.position = "right") 
+
+
+table_sym_moi_PE<- CreateTableOne(vars = c("max_moi"), strata = "Symptoms", data = symp_moi_PE_hist$data, 
+               factorVars =c("Symptoms"))
+
+print(table_sym_moi_PE,showAllLevels = TRUE,
+      nonnormal = "max_moi")
+
+
+Supp_figure4<-ggarrange(symp_moi_SI_hist, symp_moi_PE_hist,
+                              ncol=2, nrow=1, common.legend = TRUE, legend="right")
+
+print(Supp_figure4)
+
+ggsave("figs/Supp_figure4.tiff", units="cm", width=12, height=8.12, dpi=300, compression = 'lzw')
+
+```
+
+#MOI AND DAYS TO NEXT RECURRENCE
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+#################################
+# MOI AND DAY TO RECURRENCE INF #
+#                               #
+#################################
+# SI
+
+# Recast date to Date class to easy ordering of rows
+days_recurr_moi_SI<- hap_SI_epi %>% 
+  inner_join(patients_episodes_SI, by = c("info")) %>%
+  #selecting patients with more than 1 episode
+  filter(episodes >1) %>%
+  group_by(info)%>%
+  select(info, infoD,sample, trt_label,vis_date) %>%
+  mutate(vis_date = as.Date(vis_date, format = "%m/%d/%Y")) %>%
+  arrange(info, infoD, trt_label, vis_date) %>% 
+  distinct() %>% 
+  # Calculate delay since previous infection, within each ID
+  group_by(info) %>% 
+  mutate(delay_since_prev_ep = as.numeric( vis_date - first(vis_date), 
+                                                   units = "days", na.rm=T),
+         site = "Solomon Islands",
+         recurrence =rank(vis_date)) %>%
+    left_join(MOI_max_SI, by = c("sample")) %>%
+filter(!is.na(vis_date)) %>%
+  select(info, sample,  trt_label, vis_date,delay_since_prev_ep,max_moi,site,recurrence) %>%
+   rename(Patient = info,
+          treatment = trt_label,
+          date = vis_date) %>%
+  filter(!delay_since_prev_ep ==0)
+
+#PE
+
+# Recast date to Date class to easy ordering of rows
+days_recurr_moi_PE<- hap_PE_epi %>% 
+  inner_join(patients_episodes, by = c("PatientName")) %>%
+  filter(episodes >1) %>%
+  select(PatientName, sample, info,medicamento2, date) %>%
+  mutate(date = as.Date(date, format = "%m/%d/%Y")) %>%
+  arrange(PatientName, sample, info, medicamento2,date) %>% 
+  distinct() %>% 
+  # Calculate delay since previous infection, within each ID
+  group_by(PatientName) %>% 
+  mutate(delay_since_prev_ep = as.numeric( date - first(date), 
+                                                   units = "days", na.rm=T),
+         medicamento2 = case_when(medicamento2 == "C" ~ "CQ+PQ",
+                                  medicamento2 == "-1" ~ "No treatment"))%>%
+    left_join(MOI_max_PE, by = c("sample")) %>%
+      mutate(site = "Peru",
+             recurrence =rank(date)) %>%
+select(!c(info, mean_moi, median_moi, day,clones)) %>%
+  filter(!delay_since_prev_ep ==0)
+
+colnames(days_recurr_moi_PE) <- colnames(days_recurr_moi_SI)
+
+
+days_recurr_moi_plot <-
+  rbind(days_recurr_moi_SI,days_recurr_moi_PE)%>%
+  mutate(site = as.factor(case_when(site=="Peru"~ 2,
+                                    site=="Solomon Islands"~1)))%>%
+  ggplot() +
+  geom_point(aes(x = delay_since_prev_ep, y = max_moi, color= treatment),
+             size = 2, alpha = 0.8) +
+  ggtitle("") +
+  ylab("\nMOI") + xlab("") +
+  scale_fill_brewer(palette="Paired") +
+  theme_classic(base_size = 12) + 
+  theme(axis.text.x = element_text(face = "plain", color="black", size = 8, angle = 90), legend.position = "bottom") + facet_wrap(~site,
+                                                                                               labeller = labeller(site = c("1" = "Solomon Islands", "2" = "Peru")), ncol = 2)
+
+
+
+##################
+# CHANGES OF MOI #
+##################
+
+days_recurr_change_moi_SI<- hap_SI_epi %>% 
+  inner_join(patients_episodes_SI, by = c("info")) %>%
+  inner_join(baseline_patients, by = c("info")) %>%
+    left_join(follow_patients, by = c("info", "sample"))%>%
+      left_join(MOI_max_SI, by = c("sample")) %>%
+  filter(episodes >1) %>%
+  select(info, infoD,sample, max_moi,trt_label,vis_date, clones) %>%
+  mutate(vis_date = as.Date(vis_date, format = "%m/%d/%Y")) %>%
+  arrange(info, infoD, max_moi, trt_label, vis_date) %>% 
+  distinct() %>% 
+  # Calculate delay since previous infection, within each ID
+  group_by(info) %>% 
+  mutate(delay_since_prev_ep = as.numeric( vis_date - first(vis_date), 
+                                                   units = "days", na.rm=T),
+        change_moi = as.numeric(max_moi -lag(max_moi, default = first(max_moi))),
+         site = "Solomon Islands",
+         change = case_when(change_moi==0 ~"no change",
+                      change_moi<0 ~"decrease",
+                      change_moi>0 ~"increase"),
+         recurrence =rank(vis_date)) %>%
+filter(!is.na(vis_date))%>%
+  select(info, sample, max_moi, trt_label, vis_date,delay_since_prev_ep,change_moi,site, clones, change,recurrence) %>%
+   rename(Patient = info,
+          treatment = trt_label,
+          date = vis_date)%>%
+  filter(!delay_since_prev_ep ==0)
+
+days_recurr_change_moi_PE<- 
+  hap_PE_epi %>% 
+  inner_join(patients_episodes, by = c("PatientName")) %>%
+filter(episodes >1) %>%
+      left_join(MOI_max_PE, by = c("sample")) %>%
+  select(PatientName, sample, max_moi, medicamento2,date, clones) %>%
+  mutate(date = as.Date(date, format = "%m/%d/%Y")) %>%
+  arrange(PatientName, sample, max_moi, medicamento2, date) %>% 
+  distinct() %>% 
+  # Calculate delay since previous infection, within each ID
+  group_by(PatientName) %>% 
+  mutate(delay_since_prev_ep = as.numeric( date - first(date), 
+                                                   units = "days", na.rm=T),
+         change_moi = as.numeric(max_moi -lag(max_moi, default = first(max_moi))),
+         medicamento2 = case_when(medicamento2 == "C" ~ "CQ+PQ",
+                                  medicamento2 == "-1" ~ "No treatment"),
+         site = "Peru", 
+        change = case_when(change_moi==0 ~"no change",
+                      change_moi<0 ~"decrease",
+                      change_moi>0 ~"increase"),
+        recurrence =rank(date)) %>%
+select(PatientName, sample, max_moi, medicamento2, date,delay_since_prev_ep,change_moi,site, clones, change,recurrence) %>%
+  filter( !delay_since_prev_ep ==0)
+
+colnames(days_recurr_change_moi_PE) <- colnames(days_recurr_change_moi_SI)
+
+
+
+days_recurr_change_moi_plot <-
+  rbind(days_recurr_change_moi_SI,days_recurr_change_moi_PE)%>%
+  mutate(site = as.factor(case_when(site=="Peru"~ 2,
+                                    site=="Solomon Islands"~1)))%>%
+  ggplot() +
+  geom_point(aes(x = delay_since_prev_ep, y = change_moi, color= treatment),
+             size = 2, alpha = 0.8) +
+  ggtitle("") +
+  ylab("Change in MOI between\nrecurrent infections") + xlab("days to next recurrent infection") +
+  scale_fill_brewer(palette="Paired") +
+  theme_classic(base_size = 12) + 
+  theme(axis.text.x = element_text(face = "plain", color="black", size = 8, angle = 90), legend.position = "bottom")+
+  facet_wrap(~site,
+                                                                                               labeller = labeller(site = c("1" = "Solomon Islands", "2" = "Peru")), ncol = 2)
+
+
+days_recurr_moi<-ggarrange(days_recurr_moi_plot, days_recurr_change_moi_plot,
+                              ncol=1, nrow=2, common.legend = TRUE, legend="right")
+
+
+Supp_figure5 <- ggdraw() +
+  draw_plot(days_recurr_moi, x = 0.005,y = 0, width = .89, height = 0.99) +
+  draw_plot_label(label = c("A", "B"), size = 12,
+                 x = c(0,0), y = c(1, 0.5))
+
+print(Supp_figure5)
+
+ggsave("figs/Supp_figure5.tiff", units="cm", width=25.14, height=18.12, dpi=300, compression = 'lzw')
+
+```
+
+###Tables days recurrencia and MOI
+```{r, echo=FALSE, message=FALSE,}
+table_days_recurr_moi_PE<- CreateTableOne(vars = c("delay_since_prev_ep"), strata = "clones", data = days_recurr_change_moi_PE)
+
+print(table_days_recurr_moi_PE,showAllLevels = TRUE,
+      nonnormal = "delay_since_prev_ep")
+
+table_days_recurr_change_moi_PE<- CreateTableOne(vars = c("delay_since_prev_ep"), strata = "change", data = days_recurr_change_moi_PE )
+
+print(table_days_recurr_change_moi_PE,showAllLevels = TRUE,
+      nonnormal = "delay_since_prev_ep")
+
+table_days_recurr_moi_SI<- CreateTableOne(vars = c("delay_since_prev_ep"), strata = "clones", data = days_recurr_change_moi_SI)
+
+print(table_days_recurr_moi_SI,showAllLevels = TRUE,
+      nonnormal = "delay_since_prev_ep")
+
+table_days_recurr_change_moi_SI<- CreateTableOne(vars = c("delay_since_prev_ep"), strata = "change", data = days_recurr_change_moi_SI)
+
+print(table_days_recurr_change_moi_SI,showAllLevels = TRUE,
+      nonnormal = "delay_since_prev_ep")
+```
+
+#MOI splitted into baseline and recurrent _ MOI_day0_dayX_paired
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+
+MOI_day0_dayX_SI<- hap_SI_epi %>%
+  inner_join(patients_episodes_SI,by =c("info"))%>%
+  inner_join(MOI_max_SI, by =c("sample")) %>%
+  mutate(day = factor(ifelse(infoD== 0,"day_0","day_1"), 
+                        levels = c("day_0","day_1"), 
+                      labels = c("Day 0","Day X")))%>%
+  select(sample,max_moi,day)%>% 
+  distinct() %>% 
+  ggplot(aes(x = as.numeric(max_moi), fill=day)) +
+  geom_bar(position = position_dodge2(width = 0.9, preserve = "single")) +
+  ylab("Frequency") + xlab("MOI")+
+  scale_fill_manual(values = c("#660033","#FFCC66"))+
+  ggtitle("MOI among initial and recurrent infections")+
+  theme_classic(base_family = "", base_size = 12)+
+  coord_cartesian(ylim=c(0, 80))+
+  theme_classic(base_size = 12) + 
+  theme(legend.position = "right") 
+
+
+MOI_day0_dayX_paired_SI<- hap_SI_epi %>%
+  inner_join(patients_episodes_SI,by =c("info"))%>%
+  inner_join(MOI_max_SI, by =c("sample")) %>%
+  filter(episodes >1)%>%
+  mutate(day = factor(ifelse(infoD== 0,"day_0","day_1"), 
+                        levels = c("day_0","day_1"), 
+                      labels = c("Day 0","Day X")),
+         clones = case_when(max_moi =="1" ~ "mono",
+                             max_moi >"1" ~ "poly"))%>%
+  select(sample,max_moi,day, clones)%>% 
+  distinct() %>% 
+  ggplot(aes(x = as.numeric(max_moi), fill=day)) +
+  geom_bar(position = position_dodge2(width = 0.9, preserve = "single")) +
+  ylab("Frequency") + xlab("MOI")+
+  scale_fill_manual(values = c("#660033","#FFCC66"))+
+  ggtitle("Solomon\nIslands")+
+  theme_classic(base_family = "", base_size = 10)+
+  coord_cartesian(ylim=c(0, 40))+
+  theme_classic(base_size = 10) + 
+  theme(legend.position = "right",legend.text=element_text(size=6)) #+
+
+MOI_day0_dayX_PE<- hap_PE_epi %>%
+  inner_join(patients_episodes,by =c("PatientName"))%>%
+  inner_join(MOI_max_PE, by =c("sample")) %>%
+  select(PatientName,sample, max_moi,date)%>%
+  group_by(PatientName)%>%
+  distinct()%>%
+  mutate(date = as.Date(date, format = "%m/%d/%Y")) %>%
+  mutate(order =rank(date)) %>%
+   mutate(day = factor(ifelse(order== 1,"day_0","day_1"), 
+                        levels = c("day_0","day_1"), 
+                      labels = c("Day 0","Day X")))%>%
+  select(sample,max_moi,day)%>% 
+  distinct() %>% 
+  ggplot(aes(x = as.numeric(max_moi), fill=day)) +
+  geom_bar(position = position_dodge2(width = 0.9, preserve = "single")) +
+  ylab("Frequency") + xlab("MOI")+
+  scale_fill_manual(values = c("#660033","#FFCC66"))+
+  ggtitle("MOI among initial and recurrent infections")+
+  theme_classic(base_family = "", base_size = 12)+
+  coord_cartesian(ylim=c(0, 80))+
+  theme(legend.position = "right") 
+         
+MOI_day0_dayX_paired_PE<- hap_PE_epi %>%
+  inner_join(patients_episodes,by =c("PatientName"))%>%
+  inner_join(MOI_max_PE, by =c("sample")) %>%
+  filter(episodes >1) %>%
+  select(PatientName,sample, max_moi,date)%>%
+  group_by(PatientName)%>%
+  distinct()%>%
+  mutate(date = as.Date(date, format = "%m/%d/%Y")) %>%
+  mutate(order =rank(date)) %>%
+   mutate(day = factor(ifelse(order== 1,"day_0","day_1"), 
+                        levels = c("day_0","day_1"), 
+                      labels = c("Day 0","Day X")),
+          clones = case_when(max_moi =="1" ~ "mono",
+                             max_moi >"1" ~ "poly"))%>%
+  select(sample,max_moi,day, clones)%>%
+  distinct() %>% 
+  ggplot(aes(x = as.numeric(max_moi), fill=day)) +
+  geom_bar(position = position_dodge2(width = 0.9, preserve = "single")) +
+  ylab("Frequency") + xlab("MOI")+
+  scale_fill_manual(values = c("#660033","#FFCC66"))+
+  ggtitle("Peru\n")+
+  theme_classic(base_family = "", base_size = 10)+
+  coord_cartesian(ylim=c(0, 40))+
+  theme(legend.position = "right",legend.text=element_text(size=6)) 
+
+MOI_day0_dayX_paired<-ggarrange(MOI_day0_dayX_paired_SI,
+                           MOI_day0_dayX_paired_PE,ncol=2, nrow=1, common.legend = TRUE, legend="right")
+
+print(MOI_day0_dayX_paired)
+
+```
+
+## Summary MOI in day 0 and recurrence
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+
+table1(~max_moi + clones| day, data =  MOI_day0_dayX_paired_SI$data, 
+       render.missing = NULL,
+       render.categorical = "FREQ (PCTnoNA%)",
+       render = rndr)
+
+table_max_moi_SI_paired<- CreateTableOne(vars = c("max_moi","clones"), strata = "day", data = MOI_day0_dayX_paired_SI$data, 
+               factorVars =c("clones"))
+
+print(table_max_moi_SI_paired,showAllLevels = TRUE,
+      nonnormal = c("clones"))
+
+table1(~max_moi + clones| day, data =  MOI_day0_dayX_paired_PE$data, 
+       render.missing = NULL,
+       render.categorical = "FREQ (PCTnoNA%)",
+       render = rndr)
+
+table_max_moi_PE_paired<- CreateTableOne(vars = c("max_moi","clones"), strata = "day", data = MOI_day0_dayX_paired_PE$data, 
+               factorVars =c("clones"))
+
+print(table_max_moi_PE_paired,showAllLevels = TRUE,
+      nonnormal = c("clones"))
+
+
+```
+```{r echo=F, eval=F}
+save.image("./intermediate_data/intermediate_data.RData")
+```

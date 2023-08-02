@@ -1,0 +1,639 @@
+---
+title: "Classification_recurrent_infections"
+author: "Jason_Rosado"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide 
+    code_download: true
+    fig_width: 8
+    fig_height: 6
+    theme: cosmo
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, 
+                      warning = FALSE, 
+                      message = FALSE, 
+                      tidy = TRUE,
+                      fig.width = 8, 
+                      fig.height = 6)
+library(tidyverse)
+library(RColorBrewer) 
+library(ggpubr)
+library(cowplot)
+library(ggh4x)
+library(table1)
+library(tableone) 
+```
+
+
+```{r echo=FALSE, message=F, warning=F}
+load("./intermediate_data/intermediate_data.RData")
+```
+
+#CLASSIFICATION USING ALL MARKERS SI
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+
+# Count heterologuous and homologuous across all chromosomes at once
+Haplo_Class_all_SI <- 
+   hap_SI_epi %>% 
+  # First, make a list of the haplotypes at D0 for every ID
+  #filter(Frequency >= 0.02) %>%# Cut-off to detect minority clones
+  # Filtering patients id with follow up and AmpSeq run
+  #filter(info %in% follow_patients$info) %>%
+  #filter(info %in% follow_patients$info) %>%
+  extract(Haplotype, 
+          into = c("Chromosome_ID", "Haplotype_ID"), 
+          regex = "^(Chr\\d{2})-(\\d+)$", 
+          remove = FALSE) %>% 
+  filter(infoD == 0) %>% 
+  group_by(info, Chromosome_ID) %>% 
+  mutate(Haplotypes_D0 = list(Haplotype_ID)) %>% 
+  select(info, Chromosome_ID, Haplotypes_D0) %>% 
+  distinct() %>% 
+  # Convert rows with markers into persistent colums
+  pivot_wider(names_from = Chromosome_ID, 
+              names_glue = "{Chromosome_ID}_D0", 
+              values_from = Haplotypes_D0) %>% 
+  # Merge the D0 columns into original data
+  right_join(hap_SI_epi) %>% #%>% filter(info %in% hap_SI_epi$info)) %>% 
+  extract(Haplotype, 
+          into = c("Chromosome_ID", "Haplotype_ID"), 
+          regex = "^(Chr\\d{2})-(\\d+)$", 
+          remove = FALSE) %>% 
+  # Keep only samples that are not from baseline
+  filter(infoD > 0) %>% 
+  ungroup() %>% 
+  select(sample, 
+         Chromosome_ID, Haplotype_ID, 
+         ends_with("_D0")) %>% 
+  group_by(sample) %>% 
+  # Convert the markers in rows to columns
+  pivot_wider(names_from = Chromosome_ID, 
+              names_glue = "{Chromosome_ID}_Dn", 
+              values_from = Haplotype_ID, 
+              values_fn = ~list(.x)) %>% 
+  # Compare, for every chromosome, if samples from Day N
+  # are new compared to those from Day 0
+  # Heterologuous = Disappearance of all original haplotypes + appearance of new
+  # (i.e. none of current haplotypes were found at D0)
+  rowwise() %>% 
+  mutate(Chr01_NewMarker = ifelse(length(Chr01_D0) == 0 | length(Chr01_Dn) == 0, NA, 
+                                  ifelse(length(setdiff(Chr01_Dn, Chr01_D0)) > 0 & 
+                                           length(setdiff(Chr01_D0, Chr01_Dn)) == length(Chr01_D0), 1, 0)), 
+         
+         Chr02_NewMarker = ifelse(length(Chr02_D0) == 0 | length(Chr02_Dn) == 0, NA, 
+                                  ifelse(length(setdiff(Chr02_Dn, Chr02_D0)) > 0 & 
+                                           length(setdiff(Chr02_D0, Chr02_Dn)) == length(Chr02_D0), 1, 0)), 
+         
+         Chr03_NewMarker = ifelse(length(Chr03_D0) == 0 | length(Chr03_Dn) == 0, NA, 
+                                  ifelse(length(setdiff(Chr03_Dn, Chr03_D0)) > 0 & 
+                                           length(setdiff(Chr03_D0, Chr03_Dn)) == length(Chr03_D0), 1, 0)), 
+         
+         Chr05_NewMarker = ifelse(length(Chr05_D0) == 0 | length(Chr05_Dn) == 0, NA, 
+                                  ifelse(length(setdiff(Chr05_Dn, Chr05_D0)) > 0 & 
+                                           length(setdiff(Chr05_D0, Chr05_Dn)) == length(Chr05_D0), 1, 0)), 
+         
+         Chr07_NewMarker = ifelse(length(Chr07_D0) == 0 | length(Chr07_Dn) == 0, NA, 
+                                  ifelse(length(setdiff(Chr07_Dn, Chr07_D0)) > 0 & 
+                                           length(setdiff(Chr07_D0, Chr07_Dn)) == length(Chr07_D0), 1, 0)), 
+         
+         Chr08_NewMarker = ifelse(length(Chr08_D0) == 0 | length(Chr08_Dn) == 0, NA, 
+                                  ifelse(length(setdiff(Chr08_Dn, Chr08_D0)) > 0 & 
+                                           length(setdiff(Chr08_D0, Chr08_Dn)) == length(Chr08_D0), 1, 0)), 
+         
+         Chr09_NewMarker = ifelse(length(Chr09_D0) == 0 | length(Chr09_Dn) == 0, NA, 
+                                  ifelse(length(setdiff(Chr09_Dn, Chr09_D0)) > 0 & 
+                                           length(setdiff(Chr09_D0, Chr09_Dn)) == length(Chr09_D0), 1, 0)), 
+         
+         Chr10_NewMarker = ifelse(length(Chr10_D0) == 0 | length(Chr10_Dn) == 0, NA, 
+                                  ifelse(length(setdiff(Chr10_Dn, Chr10_D0)) > 0 & 
+                                           length(setdiff(Chr10_D0, Chr10_Dn)) == length(Chr10_D0), 1, 0)), 
+         
+         Chr11_NewMarker = ifelse(length(Chr11_D0) == 0 | length(Chr11_Dn) == 0, NA, 
+                                  ifelse(length(setdiff(Chr11_Dn, Chr11_D0)) > 0 & 
+                                           length(setdiff(Chr11_D0, Chr11_Dn)) == length(Chr11_D0), 1, 0)), 
+         
+         Chr13_NewMarker = ifelse(length(Chr13_D0) == 0 | length(Chr13_Dn) == 0, NA, 
+                                  ifelse(length(setdiff(Chr13_Dn, Chr13_D0)) > 0 & 
+                                           length(setdiff(Chr13_D0, Chr13_Dn)) == length(Chr13_D0), 1, 0)), 
+         
+         Chr14_NewMarker = ifelse(length(Chr14_D0) == 0 | length(Chr14_Dn) == 0, NA, 
+                                  ifelse(length(setdiff(Chr14_Dn, Chr14_D0)) > 0 & 
+                                           length(setdiff(Chr14_D0, Chr14_Dn)) == length(Chr14_D0), 1, 0))) %>% 
+  # Define multiple classifications 
+  rowwise() %>% 
+  mutate(N_heterologuous = sum(Chr01_NewMarker, 
+                               Chr02_NewMarker, 
+                               Chr03_NewMarker, 
+                               Chr05_NewMarker, 
+                               Chr07_NewMarker, 
+                               Chr08_NewMarker, 
+                               Chr09_NewMarker, 
+                               Chr10_NewMarker, 
+                               Chr11_NewMarker, 
+                               Chr13_NewMarker, 
+                               Chr14_NewMarker, 
+                               na.rm = TRUE), 
+         N_eval = length(na.omit(c(Chr01_NewMarker, 
+                                   Chr02_NewMarker, 
+                                   Chr03_NewMarker, 
+                                   Chr05_NewMarker, 
+                                   Chr07_NewMarker, 
+                                   Chr08_NewMarker, 
+                                   Chr09_NewMarker, 
+                                   Chr10_NewMarker, 
+                                   Chr11_NewMarker, 
+                                   Chr13_NewMarker, 
+                                   Chr14_NewMarker)))) %>% 
+  mutate(Prop_NewMarker = N_heterologuous / N_eval) %>% 
+  # Weighted version for all chromosomes
+  rowwise() %>% 
+  mutate(N_heterologuous_weightedHe = sum(c(Chr01_NewMarker * he_marker_SI$he[he_marker_SI$marker_id == "Chr01"], 
+                                            Chr02_NewMarker * he_marker_SI$he[he_marker_SI$marker_id == "Chr02"], 
+                                            Chr03_NewMarker * he_marker_SI$he[he_marker_SI$marker_id == "Chr03"], 
+                                            Chr05_NewMarker * he_marker_SI$he[he_marker_SI$marker_id == "Chr05"], 
+                                            Chr07_NewMarker * he_marker_SI$he[he_marker_SI$marker_id == "Chr07"], 
+                                            Chr08_NewMarker * he_marker_SI$he[he_marker_SI$marker_id == "Chr08"], 
+                                            Chr09_NewMarker * he_marker_SI$he[he_marker_SI$marker_id == "Chr09"], 
+                                            Chr10_NewMarker * he_marker_SI$he[he_marker_SI$marker_id == "Chr10"], 
+                                            Chr11_NewMarker * he_marker_SI$he[he_marker_SI$marker_id == "Chr11"], 
+                                            Chr13_NewMarker * he_marker_SI$he[he_marker_SI$marker_id == "Chr13"], 
+                                            Chr14_NewMarker * he_marker_SI$he[he_marker_SI$marker_id == "Chr14"]), 
+                                          na.rm = TRUE), 
+         N_eval_weightedHe = sum(c(!is.na(Chr01_NewMarker), 
+                                   !is.na(Chr02_NewMarker), 
+                                   !is.na(Chr03_NewMarker), 
+                                   !is.na(Chr05_NewMarker), 
+                                   !is.na(Chr07_NewMarker), 
+                                   !is.na(Chr08_NewMarker), 
+                                   !is.na(Chr09_NewMarker), 
+                                   !is.na(Chr10_NewMarker), 
+                                   !is.na(Chr11_NewMarker), 
+                                   !is.na(Chr13_NewMarker), 
+                                   !is.na(Chr14_NewMarker)) * he_marker_SI$he)) %>% 
+  mutate(Prop_NewMarker_weightedHe = N_heterologuous_weightedHe/N_eval_weightedHe,
+         Classification= ifelse(Prop_NewMarker_weightedHe >=0.75, "Heterologous", "Homologous")) %>% 
+  # Most informative chromosomes
+  rowwise() %>% 
+  mutate(N_heterologuous_top8 = sum(Chr02_NewMarker, 
+                                    Chr03_NewMarker, 
+                                    Chr05_NewMarker, 
+                                    Chr07_NewMarker, 
+                                    Chr09_NewMarker, 
+                                    Chr10_NewMarker, 
+                                    Chr13_NewMarker, 
+                                    Chr14_NewMarker, 
+                                    na.rm = TRUE), 
+         N_eval_top8 = length(na.omit(c(Chr02_NewMarker, 
+                                        Chr03_NewMarker, 
+                                        Chr05_NewMarker, 
+                                        Chr07_NewMarker, 
+                                        Chr09_NewMarker, 
+                                        Chr10_NewMarker, 
+                                        Chr13_NewMarker, 
+                                        Chr14_NewMarker)))) %>% 
+  mutate(Prop_NewMarker_top8 = N_heterologuous_top8 / N_eval_top8,
+         Consensus_top8 = ifelse(Prop_NewMarker_top8 >=0.75, "Heterologous", "Homologous")) %>% 
+  # Weighted version for top8 chromosomes
+  rowwise() %>% 
+  mutate(N_heterologuous_top8_weightedHe = sum(c(Chr02_NewMarker * he_marker_SI$he[he_marker_SI$marker_id == "Chr02"], 
+                                            Chr03_NewMarker * he_marker_SI$he[he_marker_SI$marker_id == "Chr03"], 
+                                            Chr05_NewMarker * he_marker_SI$he[he_marker_SI$marker_id == "Chr05"], 
+                                            Chr07_NewMarker * he_marker_SI$he[he_marker_SI$marker_id == "Chr07"], 
+                                            Chr09_NewMarker * he_marker_SI$he[he_marker_SI$marker_id == "Chr09"], 
+                                            Chr10_NewMarker * he_marker_SI$he[he_marker_SI$marker_id == "Chr10"], 
+                                            Chr13_NewMarker * he_marker_SI$he[he_marker_SI$marker_id == "Chr13"], 
+                                            Chr14_NewMarker * he_marker_SI$he[he_marker_SI$marker_id == "Chr14"]), 
+                                          na.rm = TRUE), 
+         N_eval_top8_weightedHe = sum(c(!is.na(Chr02_NewMarker), 
+                                   !is.na(Chr03_NewMarker), 
+                                   !is.na(Chr05_NewMarker), 
+                                   !is.na(Chr07_NewMarker), 
+                                   !is.na(Chr09_NewMarker), 
+                                   !is.na(Chr10_NewMarker), 
+                                   !is.na(Chr13_NewMarker), 
+                                   !is.na(Chr14_NewMarker)) * he_marker_SI$he[-c(1, 3, 7, 10)])) %>% 
+  mutate(Prop_NewMarker_top8_weightedHe = N_heterologuous_top8_weightedHe/N_eval_top8_weightedHe) %>% 
+  # Most informative chromosomes
+  rowwise() %>% 
+  mutate(N_heterologuous_top4 = sum(Chr02_NewMarker, 
+                                    Chr14_NewMarker, 
+                                    Chr05_NewMarker, 
+                                    Chr07_NewMarker, 
+                                    na.rm = TRUE), 
+         N_eval_top4 = length(na.omit(c(Chr02_NewMarker, 
+                                        Chr14_NewMarker, 
+                                        Chr05_NewMarker, 
+                                        Chr07_NewMarker)))) %>% 
+  mutate(Prop_NewMarker_top4 = N_heterologuous_top4 / N_eval_top4,
+         Consensus_top4 = ifelse(Prop_NewMarker_top4 >=0.75, "Heterologous", "Homologous")) %>% 
+  # Weighted version for top4 chromosomes
+  rowwise() %>% 
+  mutate(N_heterologuous_top4_weightedHe = sum(c(Chr02_NewMarker * he_marker_SI$he[he_marker_SI$marker_id == "Chr02"], 
+                                                 Chr05_NewMarker * he_marker_SI$he[he_marker_SI$marker_id == "Chr05"], 
+                                                 Chr07_NewMarker * he_marker_SI$he[he_marker_SI$marker_id == "Chr07"], 
+                                                 Chr14_NewMarker * he_marker_SI$he[he_marker_SI$marker_id == "Chr14"]), 
+                                               na.rm = TRUE), 
+         N_eval_top4_weightedHe = sum(c(!is.na(Chr02_NewMarker), 
+                                        !is.na(Chr05_NewMarker), 
+                                        !is.na(Chr07_NewMarker), 
+                                        !is.na(Chr14_NewMarker)) * he_marker_SI$he[c(2, 4, 5, 11)])) %>% 
+  mutate(Prop_NewMarker_top4_weightedHe = N_heterologuous_top4_weightedHe/N_eval_top4_weightedHe)
+
+```
+
+#CLASSIFICATION USING ALL MARKERS PE
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+# Count heterologuous and homologuous across all chromosomes at once
+
+Haplo_Class_all_PE <- 
+  hap_PE_epi %>% 
+  # First, make a list of the haplotypes at D0 for every ID
+  # Filtering patients id with follow up and AmpSeq run
+  #filter(PatientName %in% patients_two_episodes_PE$PatientName) %>%
+  filter(PatientName %in% days_recurr_change_moi_PE$Patient) %>%
+  select(PatientName, sample, marker_id,date,haplotype) %>%
+  extract(haplotype, 
+          into = c("Chromosome_ID", "Haplotype_ID"), 
+          regex = "^(Chr\\d{2})-(\\d+)$", 
+          remove = FALSE) %>% 
+  mutate(date = as.Date(date, format = "%m/%d/%Y")) %>%
+  group_by(PatientName)%>% 
+  arrange(date) %>% 
+  filter(date == min(date)) %>% 
+  group_by(PatientName, Chromosome_ID) %>% 
+  mutate(Haplotypes_D0 = list(Haplotype_ID)) %>% 
+  select(PatientName, Chromosome_ID, Haplotypes_D0) %>% 
+  distinct() %>% 
+  # Convert rows with markers into persistent colums
+  pivot_wider(names_from = Chromosome_ID, 
+              names_glue = "{Chromosome_ID}_D0", 
+              values_from = Haplotypes_D0) %>% 
+  # Merge the D0 columns into original data
+  right_join(hap_PE_epi %>% filter(PatientName %in% patients_two_episodes_PE$PatientName)) %>% 
+  left_join(MOI_day0_dayX_paired_PE$data) %>% 
+  #select(PatientName, sample, marker_id,date,haplotype) %>%
+  extract(haplotype, 
+          into = c("Chromosome_ID", "Haplotype_ID"), 
+          regex = "^(Chr\\d{2})-(\\d+)$", 
+          remove = FALSE) %>% 
+  # Keep only samples that are not from baseline
+  group_by(PatientName)%>% 
+  mutate(date = as.Date(date, format = "%m/%d/%Y"),
+        recurrence =rank(date)) %>% 
+  filter(day == "Day X" ) %>% 
+  ungroup() %>% 
+  select(sample, 
+         Chromosome_ID, Haplotype_ID, 
+         ends_with("_D0")) %>% 
+  group_by(sample) %>% 
+  # Convert the markers in rows to columns
+  pivot_wider(names_from = Chromosome_ID, 
+              names_glue = "{Chromosome_ID}_Dn", 
+              values_from = Haplotype_ID, 
+              values_fn = ~list(.x)) %>% 
+  # Compare, for every chromosome, if samples from Day N
+  # are new compared to those from Day 0
+  # Heterologuous = Disappearance of all original haplotypes + appearance of new
+  # (i.e. none of current haplotypes were found at D0)
+  rowwise() %>% 
+  mutate(Chr01_NewMarker = ifelse(length(Chr01_D0) == 0 | length(Chr01_Dn) == 0, NA, 
+                                  ifelse(length(setdiff(Chr01_Dn, Chr01_D0)) > 0 & 
+                                           length(setdiff(Chr01_D0, Chr01_Dn)) == length(Chr01_D0), 1, 0)), 
+         
+         Chr02_NewMarker = ifelse(length(Chr02_D0) == 0 | length(Chr02_Dn) == 0, NA, 
+                                  ifelse(length(setdiff(Chr02_Dn, Chr02_D0)) > 0 & 
+                                           length(setdiff(Chr02_D0, Chr02_Dn)) == length(Chr02_D0), 1, 0)), 
+         
+         Chr03_NewMarker = ifelse(length(Chr03_D0) == 0 | length(Chr03_Dn) == 0, NA, 
+                                  ifelse(length(setdiff(Chr03_Dn, Chr03_D0)) > 0 & 
+                                           length(setdiff(Chr03_D0, Chr03_Dn)) == length(Chr03_D0), 1, 0)), 
+
+         Chr05_NewMarker = ifelse(length(Chr05_D0) == 0 | length(Chr05_Dn) == 0, NA, 
+                                  ifelse(length(setdiff(Chr05_Dn, Chr05_D0)) > 0 & 
+                                           length(setdiff(Chr05_D0, Chr05_Dn)) == length(Chr05_D0), 1, 0)), 
+         
+         Chr07_NewMarker = ifelse(length(Chr07_D0) == 0 | length(Chr07_Dn) == 0, NA, 
+                                  ifelse(length(setdiff(Chr07_Dn, Chr07_D0)) > 0 & 
+                                           length(setdiff(Chr07_D0, Chr07_Dn)) == length(Chr07_D0), 1, 0)), 
+         
+         Chr08_NewMarker = ifelse(length(Chr08_D0) == 0 | length(Chr08_Dn) == 0, NA, 
+                                  ifelse(length(setdiff(Chr08_Dn, Chr08_D0)) > 0 & 
+                                           length(setdiff(Chr08_D0, Chr08_Dn)) == length(Chr08_D0), 1, 0)), 
+         
+         Chr09_NewMarker = ifelse(length(Chr09_D0) == 0 | length(Chr09_Dn) == 0, NA, 
+                                  ifelse(length(setdiff(Chr09_Dn, Chr09_D0)) > 0 & 
+                                           length(setdiff(Chr09_D0, Chr09_Dn)) == length(Chr09_D0), 1, 0)), 
+         
+         Chr10_NewMarker = ifelse(length(Chr10_D0) == 0 | length(Chr10_Dn) == 0, NA, 
+                                  ifelse(length(setdiff(Chr10_Dn, Chr10_D0)) > 0 & 
+                                           length(setdiff(Chr10_D0, Chr10_Dn)) == length(Chr10_D0), 1, 0)), 
+         
+         Chr11_NewMarker = ifelse(length(Chr11_D0) == 0 | length(Chr11_Dn) == 0, NA, 
+                                  ifelse(length(setdiff(Chr11_Dn, Chr11_D0)) > 0 & 
+                                           length(setdiff(Chr11_D0, Chr11_Dn)) == length(Chr11_D0), 1, 0)), 
+         
+         Chr13_NewMarker = ifelse(length(Chr13_D0) == 0 | length(Chr13_Dn) == 0, NA, 
+                                  ifelse(length(setdiff(Chr13_Dn, Chr13_D0)) > 0 & 
+                                           length(setdiff(Chr13_D0, Chr13_Dn)) == length(Chr13_D0), 1, 0)), 
+         
+         Chr14_NewMarker = ifelse(length(Chr14_D0) == 0 | length(Chr14_Dn) == 0, NA, 
+                                  ifelse(length(setdiff(Chr14_Dn, Chr14_D0)) > 0 & 
+                                           length(setdiff(Chr14_D0, Chr14_Dn)) == length(Chr14_D0), 1, 0))) %>% 
+  # Define multiple classifications 
+  rowwise() %>% 
+  mutate(N_heterologuous = sum(Chr01_NewMarker, 
+                               Chr02_NewMarker, 
+                               Chr03_NewMarker, 
+                               Chr05_NewMarker, 
+                               Chr07_NewMarker, 
+                               Chr08_NewMarker, 
+                               Chr09_NewMarker, 
+                               Chr10_NewMarker, 
+                               Chr11_NewMarker, 
+                               Chr13_NewMarker, 
+                               Chr14_NewMarker, 
+                               na.rm = TRUE), 
+         N_eval = length(na.omit(c(Chr01_NewMarker, 
+                                   Chr02_NewMarker, 
+                                   Chr03_NewMarker, 
+                                   Chr05_NewMarker, 
+                                   Chr07_NewMarker, 
+                                   Chr08_NewMarker, 
+                                   Chr09_NewMarker, 
+                                   Chr10_NewMarker, 
+                                   Chr11_NewMarker, 
+                                   Chr13_NewMarker, 
+                                   Chr14_NewMarker)))) %>% 
+  mutate(Prop_NewMarker = N_heterologuous / N_eval) %>% 
+  # Weighted version for all chromosomes
+  rowwise() %>% 
+  mutate(N_heterologuous_weightedHe = sum(c(Chr01_NewMarker * he_marker_PE$he[he_marker_PE$marker_id == "Chr01"], 
+                                            Chr02_NewMarker * he_marker_PE$he[he_marker_PE$marker_id == "Chr02"], 
+                                            Chr03_NewMarker * he_marker_PE$he[he_marker_PE$marker_id == "Chr03"], 
+                                            Chr05_NewMarker * he_marker_PE$he[he_marker_PE$marker_id == "Chr05"], 
+                                            Chr07_NewMarker * he_marker_PE$he[he_marker_PE$marker_id == "Chr07"], 
+                                            Chr08_NewMarker * he_marker_PE$he[he_marker_PE$marker_id == "Chr08"], 
+                                            Chr09_NewMarker * he_marker_PE$he[he_marker_PE$marker_id == "Chr09"], 
+                                            Chr10_NewMarker * he_marker_PE$he[he_marker_PE$marker_id == "Chr10"], 
+                                            Chr11_NewMarker * he_marker_PE$he[he_marker_PE$marker_id == "Chr11"], 
+                                            Chr13_NewMarker * he_marker_PE$he[he_marker_PE$marker_id == "Chr13"], 
+                                            Chr14_NewMarker * he_marker_PE$he[he_marker_PE$marker_id == "Chr14"]), 
+                                          na.rm = TRUE), 
+         N_eval_weightedHe = sum(c(!is.na(Chr01_NewMarker), 
+                                   !is.na(Chr02_NewMarker), 
+                                   !is.na(Chr03_NewMarker), 
+                                   !is.na(Chr05_NewMarker), 
+                                   !is.na(Chr07_NewMarker), 
+                                   !is.na(Chr08_NewMarker), 
+                                   !is.na(Chr09_NewMarker), 
+                                   !is.na(Chr10_NewMarker), 
+                                   !is.na(Chr11_NewMarker), 
+                                   !is.na(Chr13_NewMarker), 
+                                   !is.na(Chr14_NewMarker)) * he_marker_PE$he)) %>% 
+  mutate(Prop_NewMarker_weightedHe = N_heterologuous_weightedHe/N_eval_weightedHe,
+         Classification = ifelse(Prop_NewMarker_weightedHe >=0.75, "Heterologous", "Homologous")) %>% 
+  # Most informative chromosomes
+  rowwise() %>% 
+  mutate(N_heterologuous_top8 = sum(Chr02_NewMarker, 
+                                    Chr05_NewMarker, 
+                                    Chr07_NewMarker, 
+                                    Chr08_NewMarker, 
+                                    Chr09_NewMarker, 
+                                    Chr11_NewMarker, 
+                                    Chr13_NewMarker, 
+                                    Chr14_NewMarker, 
+                                    na.rm = TRUE), 
+         N_eval_top8 = length(na.omit(c(Chr02_NewMarker, 
+                                        Chr05_NewMarker, 
+                                        Chr07_NewMarker, 
+                                        Chr08_NewMarker, 
+                                        Chr09_NewMarker, 
+                                        Chr11_NewMarker, 
+                                        Chr13_NewMarker, 
+                                        Chr14_NewMarker)))) %>% 
+  mutate(Prop_NewMarker_top8 = N_heterologuous_top8 / N_eval_top8,
+         Consensus_top8 = ifelse(Prop_NewMarker_top8 >=0.75, "Heterologous", "Homologous")) %>% 
+  # Weighted version for top8 chromosomes
+  rowwise() %>% 
+  mutate(N_heterologuous_top8_weightedHe = sum(c(Chr02_NewMarker * he_marker_PE$he[he_marker_PE$marker_id == "Chr02"], 
+                                            Chr05_NewMarker * he_marker_PE$he[he_marker_PE$marker_id == "Chr05"], 
+                                            Chr07_NewMarker * he_marker_PE$he[he_marker_PE$marker_id == "Chr07"], 
+                                            Chr08_NewMarker * he_marker_PE$he[he_marker_PE$marker_id == "Chr08"], 
+                                            Chr09_NewMarker * he_marker_PE$he[he_marker_PE$marker_id == "Chr09"], 
+                                            Chr11_NewMarker * he_marker_PE$he[he_marker_PE$marker_id == "Chr11"], 
+                                            Chr13_NewMarker * he_marker_PE$he[he_marker_PE$marker_id == "Chr13"], 
+                                            Chr14_NewMarker * he_marker_PE$he[he_marker_PE$marker_id == "Chr14"]), 
+                                          na.rm = TRUE), 
+         N_eval_top8_weightedHe = sum(c(!is.na(Chr02_NewMarker), 
+                                   !is.na(Chr05_NewMarker), 
+                                   !is.na(Chr07_NewMarker), 
+                                   !is.na(Chr08_NewMarker), 
+                                   !is.na(Chr09_NewMarker), 
+                                   !is.na(Chr11_NewMarker), 
+                                   !is.na(Chr13_NewMarker), 
+                                   !is.na(Chr14_NewMarker)) * he_marker_PE$he[-c(1, 3, 8)])) %>% 
+  mutate(Prop_NewMarker_top8_weightedHe = N_heterologuous_top8_weightedHe/N_eval_top8_weightedHe) %>% 
+  # Most informative chromosomes
+  rowwise() %>% 
+  mutate(N_heterologuous_top4 = sum(Chr05_NewMarker, 
+                                    Chr11_NewMarker, 
+                                    Chr07_NewMarker, 
+                                    Chr08_NewMarker, 
+                                    na.rm = TRUE), 
+         N_eval_top4 = length(na.omit(c(Chr05_NewMarker, 
+                                        Chr11_NewMarker, 
+                                        Chr07_NewMarker, 
+                                        Chr08_NewMarker)))) %>% 
+  mutate(Prop_NewMarker_top4 = N_heterologuous_top4 / N_eval_top4,
+         Consensus_top4 = ifelse(Prop_NewMarker_top4 >=0.75, "Heterologous", "Homologous")) %>% 
+  # Weighted version for top4 chromosomes
+  rowwise() %>% 
+  mutate(N_heterologuous_top4_weightedHe = sum(c(Chr05_NewMarker * he_marker_PE$he[he_marker_PE$marker_id == "Chr05"], 
+                                                 Chr11_NewMarker * he_marker_PE$he[he_marker_PE$marker_id == "Chr11"], 
+                                                 Chr07_NewMarker * he_marker_PE$he[he_marker_PE$marker_id == "Chr07"], 
+                                                 Chr08_NewMarker * he_marker_PE$he[he_marker_PE$marker_id == "Chr08"]), 
+                                               na.rm = TRUE), 
+         N_eval_top4_weightedHe = sum(c(!is.na(Chr05_NewMarker), 
+                                        !is.na(Chr11_NewMarker), 
+                                        !is.na(Chr07_NewMarker), 
+                                        !is.na(Chr08_NewMarker)) * he_marker_PE$he[c(4, 5, 6, 9)])) %>% 
+  mutate(Prop_NewMarker_top4_weightedHe = N_heterologuous_top4_weightedHe/N_eval_top4_weightedHe) 
+
+```
+
+#Plot classification and change within host dynamic
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+dist_Haplo_class_SI_first_rec<- Haplo_Class_all_SI %>% 
+   left_join(days_recurr_change_moi_SI, by = c("sample")) %>%
+  distinct() %>%
+  filter(!is.na(treatment)) %>%
+  group_by(Patient)%>%
+  mutate(treatment2 = ifelse(treatment == "AL","AL", "PQ" ),
+         Prop_het= (1- Prop_NewMarker_weightedHe),
+         identity = cut(Prop_NewMarker_weightedHe, breaks = c(-Inf,0,0.75,1)))%>%
+         select(sample,Patient,date,treatment,treatment2, recurrence,Prop_het,delay_since_prev_ep,change_moi,max_moi,clones,identity, Classification) %>%
+ggplot(aes(x = Prop_het, fill=Classification)) + 
+  geom_histogram(binwidth = 0.05) + ggtitle("Solomon Islands")+
+xlab(bquote(1 - P [NH])) + ylab("Frequency") +
+  scale_fill_brewer(palette="Paired") + expand_limits(x=c(0, 1))+ coord_cartesian(ylim=c(0, 20))+  scale_x_continuous(breaks = c(0.00,0.25,0.50,0.75,1.00), labels = c("0" = "0.00","0.25" = "0.25","0.50" = "0.50","0.75" = "0.75","1.00"= "1.00"))+
+  theme_classic(base_size = 12) + 
+  theme(axis.text.x = element_text(face = "plain", color="black", size = 8, angle = 90), legend.position = "bottom") 
+
+change_Prop_New_hap_SI<- Haplo_Class_all_SI %>% 
+   left_join(days_recurr_change_moi_SI, by = c("sample")) %>%
+  distinct() %>%
+  filter(!is.na(treatment)) %>%
+  left_join(patients_episodes_SI, by = c("Patient" = "info" )) %>%
+  group_by(Patient)%>%
+  mutate(date = as.Date(date, format = "%m/%d/%Y")) %>%
+  mutate(recurrence =as.factor(rank(date)),
+         Prop_het= (1- Prop_NewMarker_weightedHe)) %>%
+  select(sample,Patient,date,recurrence,Prop_het,delay_since_prev_ep,change_moi, Classification, episodes) %>%
+  ggplot(aes(x = delay_since_prev_ep, y = Prop_het, group = Patient, colour = as.factor(recurrence))) +
+  geom_line(aes(group = Patient,colour = Patient),  colour = "black",
+           size = 0.5, linetype = "solid")+
+  geom_point(aes(colour = as.factor(recurrence), fill = recurrence),pch=21,size = 2.75, colour = "black", alpha = 0.8) + expand_limits(y=c(0.00, 1.00))+ 
+  coord_cartesian(xlim=c(0, 320))+
+    scale_y_continuous(breaks = c(0.00,0.25,0.50,0.75,1.00), labels = c("0" = "0.00","0.25" = "0.25","0.50" = "0.50","0.75" = "0.75","1.00"= "1.00"))+
+  ggtitle("Solomon Islands") +
+  ylab(bquote(1 - P [NH])) + xlab("days to next recurrent infection") +
+  scale_fill_brewer(palette="Accent") +
+  theme_classic(base_size = 12) + 
+  theme(axis.text.x = element_text(face = "plain", color="black", size = 8, angle = 90), legend.position = "bottom") +
+  facet_wrap(~episodes,
+             labeller = labeller(episodes = c("2"="1 recurrence", "3" ="2 recurrences","4"= "3 recurrences", "5"= "4 recurrrences","6"= "5 recurrences")))
+
+dist_Haplo_class_PE_first_rec<-
+  Haplo_Class_all_PE %>%
+  left_join(days_recurr_change_moi_PE, by=c("sample")) %>%
+  group_by(Patient)%>%
+  mutate(Prop_het= (1- Prop_NewMarker_weightedHe),
+         identity = cut(Prop_NewMarker_weightedHe, breaks = c(-Inf,0,0.75,1)))%>%
+  select(sample,Patient,date,treatment, recurrence,Prop_het,delay_since_prev_ep,change_moi,max_moi,clones,identity, Classification) %>%
+ggplot(aes(x = Prop_het, fill=Classification)) + 
+  geom_histogram(binwidth = 0.05) + ggtitle("Peru")+
+xlab(bquote(1 - P [NH])) + ylab("Frequency") +
+  scale_fill_brewer(palette="Paired") +
+  theme_classic(base_size = 12) +  coord_cartesian(xlim=c(0, 1))+ 
+  coord_cartesian(ylim=c(0, 20))+   
+  theme(axis.text.x = element_text(face = "plain", color="black", size = 8, angle = 90), legend.position = "bottom") 
+
+change_Prop_New_hap_PE<- Haplo_Class_all_PE %>% 
+  left_join(days_recurr_change_moi_PE, by = c("sample")) %>%
+  distinct() %>%
+  filter(!is.na(treatment)) %>%
+  left_join(patients_episodes, by = c("Patient" = "PatientName" )) %>%
+  group_by(Patient)%>%
+  mutate(date = as.Date(date, format = "%m/%d/%Y")) %>%
+  mutate(recurrence = as.factor(rank(date)),
+         Prop_het= (1- Prop_NewMarker_weightedHe)) %>%
+  select(sample,Patient,date,treatment,recurrence,Prop_het,delay_since_prev_ep,change_moi, Classification, episodes) %>%
+  ggplot(aes(x = delay_since_prev_ep, y = Prop_het, group = Patient, colour = recurrence)) +
+geom_line(aes(group = Patient,colour = Patient),  colour = "black",
+           size = 0.5, linetype = "solid")+
+geom_point(aes(colour = as.factor(recurrence), fill = recurrence),pch=21,size = 2.75, colour = "black", alpha = 0.8) + coord_cartesian(ylim=c(0, 1))+ coord_cartesian(xlim=c(0, 320))+
+  ggtitle("Peru") +
+  ylab(bquote(1 - P [NH])) + xlab("days to next recurrent infection") +
+  scale_fill_brewer(palette="Accent") +
+  theme_classic(base_size = 12) + 
+  theme(axis.text.x = element_text(face = "plain", color="black", size = 8, angle = 90), legend.position = "bottom") +
+  facet_wrap(~episodes, ncol = 3, 
+             labeller = labeller(episodes = c("2"="1 recurrence", "3" ="2 recurrences","4"= "3 recurrences", "5"= "4 recurrrences","6"= "5 recurrences")))
+
+distribution_prop_identity<-ggarrange(dist_Haplo_class_SI_first_rec, dist_Haplo_class_PE_first_rec,
+                                ncol=2, nrow=1, common.legend = TRUE, legend="bottom")
+
+change_prop_identity<-ggarrange(change_Prop_New_hap_SI, change_Prop_New_hap_PE,
+                                ncol=2, nrow=1, common.legend = TRUE, legend="bottom")
+
+figure5 <- ggdraw() +
+  draw_plot(distribution_prop_identity, x = 0.005,y = 0.5, width = .99, height = 0.49) +
+  draw_plot(change_prop_identity, x = 0.005,y = 0, width = .99, height = 0.49) +
+  draw_plot_label(label = c("A", "B"), size = 12,
+                 x = c(0,0), y = c(1, 0.5))
+
+print(figure5)
+ 
+ggsave("figs/figure5.tiff", units="cm", width=25.14, height=20.12, dpi=300, compression = 'lzw')
+
+```
+
+#Classification vs treatment
+```{r}
+
+#######
+# SI  #
+#######
+table1(~ delay_since_prev_ep |Classification, data =dist_Haplo_class_SI_first_rec[["data"]])
+
+table_treatment_classification<- CreateTableOne(vars = c("Classification"), strata = "treatment2", data = dist_Haplo_class_SI_first_rec[["data"]], 
+               factorVars =c("Classification"))
+
+print(table_treatment_classification,showAllLevels = TRUE,
+      nonnormal = "Classification")
+
+#######
+# PE  #
+#######
+
+table1(~ delay_since_prev_ep |Classification, data =dist_Haplo_class_PE_first_rec[["data"]])
+
+```
+
+# Performance by all, 8 and 4 top markers
+```{r}
+
+table1(~ Classification + Consensus_top8 + Consensus_top4, data =Haplo_Class_all_SI)
+
+table1(~ Classification + Consensus_top8 + Consensus_top4, data =Haplo_Class_all_PE)
+
+```
+
+#Clonality and classification in SI
+```{r}
+table1(~ clones|Classification, data =dist_Haplo_class_SI_first_rec[["data"]])
+
+CreateTableOne(vars = c("clones"), strata = "Classification", data = dist_Haplo_class_SI_first_rec[["data"]], 
+               factorVars =c("clones"))
+
+table1(~ clones | identity, data =dist_Haplo_class_SI_first_rec[["data"]])
+
+CreateTableOne(vars = c("clones"), strata = "identity", data = dist_Haplo_class_SI_first_rec[["data"]], 
+               factorVars =c("clones"))
+```
+#Clonality and classification in PE
+```{r}
+table1(~ clones|Classification, data =dist_Haplo_class_PE_first_rec[["data"]])
+
+CreateTableOne(vars = c("clones"), strata = "Classification", data = dist_Haplo_class_PE_first_rec[["data"]], 
+               factorVars =c("clones"))
+
+table1(~ clones | identity, data =dist_Haplo_class_PE_first_rec[["data"]])
+
+CreateTableOne(vars = c("clones"), strata = "identity", data = dist_Haplo_class_PE_first_rec[["data"]],
+               factorVars =c("clones"))
+```
+
+#Classification vs delay since previous infection
+```{r}
+table_time_classification_si<- CreateTableOne(vars = c("delay_since_prev_ep"), strata = "Classification", data = dist_Haplo_class_SI_first_rec[["data"]], 
+               factorVars =c("Classification"))
+
+print(table_time_classification_si,showAllLevels = TRUE,
+      nonnormal = "delay_since_prev_ep")
+
+table_time_classification_pe<- CreateTableOne(vars = c("delay_since_prev_ep"), strata = "Classification", data = dist_Haplo_class_PE_first_rec[["data"]], 
+               factorVars =c("Classification"))
+
+print(table_time_classification_pe,showAllLevels = TRUE,
+      nonnormal = "delay_since_prev_ep")
+```
+```{r echo=F, eval=F}
+save.image("./intermediate_data/intermediate_data.RData")
+```
+
