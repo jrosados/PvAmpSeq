@@ -238,7 +238,8 @@ serial_dilutions <-readRDS(here("raw_data", "mix_infections_seq_tbl.rds"))
 
 serial_dilutions<- serial_dilutions %>%
   filter(sample %in% c("AR246_802","AR246_80", "AR246_40", "AR246_8","AR246_4", "AR246_08"),
-         status %in% c("failed_dada", "pass", "low_sample_count")) %>%
+         status %in% c("failed_dada", "pass", "low_sample_count"),
+         !marker_id =="Chr04") %>%
   group_by(sample, marker_id, info, status) %>%
   mutate(info = as.numeric(info),
           count = replace_na(count,10000),
@@ -262,7 +263,7 @@ reads_parasites_controls <- serial_dilutions%>%
         strip.text.x = element_text(size = 10, color = "black")) +
   scale_y_log10(breaks = c(10,100,1000,10000, 100000),
                 label = c("10", "100", "1000", "10000", "100000")) +
-  facet_wrap(~ info, labeller = labeller(info = c("802"="267 p/uL","80.2"="27 p/uL","40.1"="13 p/uL","8.02"="2.7 p/uL","4.01" = "1.34 p/uL", "0.8"="0.27 p/uL")),
+  facet_wrap(~ info, labeller = labeller(info = c("802"="802 p/uL","80.2"="80.2 p/uL","40.1"="40.1 p/uL","8.02"="8.02 p/uL","4.01" = "4.01 p/uL", "0.8"="0.8 p/uL")),
              ncol = 3) 
 ```
 

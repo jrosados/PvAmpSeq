@@ -36,9 +36,10 @@ library(tableone)
 #SOLOMON ISLANDS    #
 #####################
 
-### SELECTING SAMPLE HAPLOTYPES WITH >1% FREQUENCY
+### SELECTING SAMPLE HAPLOTYPES WITH >1% FREQUENCY AND PRESENT IN AT LEAST >=2 SAMPLES
 Filter_hap_SI <- readRDS(here("raw_data","SI_seq_tbl_End_Filter.rds")) %>%
-  filter(Frequency >= 0.01) 
+  filter(Frequency >= 0.01) %>%
+  filter(length(unique(Haplotype)) > 1) 
 
 AmpSeq_samples_data_SI <- read.delim(here("raw_data","sample_table_SI_301220.txt"), header = TRUE, sep = "\t")
 
@@ -56,9 +57,10 @@ hap_SI_epi<-
 #########################
 # PERUVIAN COHORT       #
 #########################
-
+### SELECTING SAMPLE HAPLOTYPES WITH >1% FREQUENCY AND PRESENT IN AT LEAST >=2 SAMPLES
 Filter_hap_PE <- readRDS(here("raw_data", "PE_seq_flt_tbl.rds")) %>%
-  filter(frequency >= 0.01)
+  filter(frequency >= 0.01) %>%
+  filter(length(unique(haplotype)) > 1) 
 
 AmpSeq_samples_data_PE <- read.csv(here("raw_data","PE_Sample_sheet.csv"), header = TRUE)
 
@@ -159,7 +161,6 @@ samples_sum <- hap_SI_epi %>%
   group_by(info) %>% 
   distinct()
 
-
 table1(~ age_y +gender+ trt_label, data = patients_sum, render.continuous = c("Median [Q1, Q3]"))
 
 table_samples_summ<- CreateTableOne(vars = c("parasites_ul","pv_clin"), strata = "follow", data = samples_sum, 
@@ -242,7 +243,6 @@ table1(~ episodes + factor(plus_2epis), data =  patients_episodes,
        render = rndr)
 
 table1(~ parasites_uL + factor(clinic_Pvinf)| day, data = samples_sum_PE,render.continuous = c("Median [Q1, Q3]") )
-
 
 table_summ_PE<- CreateTableOne(vars = c("parasites_uL","clinic_Pvinf"), strata = "day", data = samples_sum_PE, 
                factorVars =c("clinic_Pvinf"))
