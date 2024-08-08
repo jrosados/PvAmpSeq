@@ -40,13 +40,13 @@ load("./intermediate_data/intermediate_data.RData")
 
 MOI_marker_sample_SI <- 
   hap_SI_epi %>% 
-  group_by(marker_id, sample) %>% 
+  group_by(marker_id, sample, follow) %>% 
   summarise(n_hap = n_distinct(Haplotype)) %>%
   group_by(marker_id, sample) 
 
 MOI_mean_by_marker_SI <-
   MOI_marker_sample_SI %>%
-  group_by(marker_id) %>%
+  group_by(marker_id,follow) %>%
   summarise(mean_moi = mean(n_hap), median_moi = median(n_hap), max_moi = max(n_hap)) %>%
   arrange(desc(mean_moi))
 
@@ -72,12 +72,12 @@ print(table_max_moi_SI,showAllLevels = TRUE,
       nonnormal = "max_moi")
 
 clonality_per_marker_SI<- hap_SI_epi %>% 
-  filter(!infoD == "0") %>%
-  group_by(marker_id, sample) %>% 
+  #filter(!infoD == "0") %>%
+  group_by(marker_id, sample, follow) %>% 
   summarise(n_hap = n_distinct(Haplotype)) %>%
   mutate(clones = case_when(n_hap =="1" ~ "mono",
                              n_hap >"1" ~ "poly"))%>%
-  group_by(marker_id, clones) %>%
+  group_by(follow,marker_id, clones) %>%
   summarise(n = n())%>%
   mutate(poly = (n*100 / sum(n)))
 
@@ -114,7 +114,7 @@ MOI_max_PE<-
   summarise(n_hap = n_distinct(haplotype)) %>%
   summarise(mean_moi = mean(n_hap), median_moi = median(n_hap), max_moi = max(n_hap))%>%
 mutate(clones = case_when(max_moi =="1" ~ "mono",
-                             max_moi >"1" ~ "poly"))%>%
+                             max_moi >"1" ~ "poly")) %>%
   group_by(day, sample) 
 
 table1(~ as.factor(max_moi) + clones|day, data =  MOI_max_PE, 
