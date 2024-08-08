@@ -577,6 +577,9 @@ table_treatment_classification<- CreateTableOne(vars = c("Classification"), stra
 print(table_treatment_classification,showAllLevels = TRUE,
       nonnormal = "Classification")
 
+fisher.test(dist_Haplo_class_SI_first_rec$data$treatment2, dist_Haplo_class_SI_first_rec$data$Classification)
+
+
 #######
 # PE  #
 #######
@@ -601,6 +604,9 @@ table1(~ clones|Classification, data =dist_Haplo_class_SI_first_rec[["data"]])
 CreateTableOne(vars = c("clones"), strata = "Classification", data = dist_Haplo_class_SI_first_rec[["data"]], 
                factorVars =c("clones"))
 
+fisher.test(dist_Haplo_class_SI_first_rec$data$clones, dist_Haplo_class_SI_first_rec$data$Classification)
+
+
 table1(~ clones | identity, data =dist_Haplo_class_SI_first_rec[["data"]])
 
 CreateTableOne(vars = c("clones"), strata = "identity", data = dist_Haplo_class_SI_first_rec[["data"]], 
@@ -612,6 +618,8 @@ table1(~ clones|Classification, data =dist_Haplo_class_PE_first_rec[["data"]])
 
 CreateTableOne(vars = c("clones"), strata = "Classification", data = dist_Haplo_class_PE_first_rec[["data"]], 
                factorVars =c("clones"))
+
+fisher.test(dist_Haplo_class_PE_first_rec$data$clones, dist_Haplo_class_PE_first_rec$data$Classification)
 
 table1(~ clones | identity, data =dist_Haplo_class_PE_first_rec[["data"]])
 
