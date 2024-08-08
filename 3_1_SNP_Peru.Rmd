@@ -28,13 +28,21 @@ load("./intermediate_data/intermediate_data.RData")
 data_all <- hap_PE_epi %>%
  dplyr::select(sample_id, marker_id,sequence)
 
+# data_baseline <- data_all %>%
+#   inner_join(samples_sum_PE %>% filter(day=="Day 0"), by = c("sample_id" = "sample"))  %>%
+#  dplyr::select(sample_id, marker_id,sequence)
+
+data_follow <- data_all %>%
+  inner_join(samples_sum_PE %>% filter(day=="Day X"), by = c("sample_id" = "sample"))  %>%
+  dplyr::select(sample_id, marker_id,sequence)
+
 marker_info <- read.csv(here("raw_data","marker_info.csv"))
 # SNPs
 # Get the variant position
 all_markers <- marker_info
 all_markers <- all_markers %>%
-  filter(marker_id %in% as.character(data_all$marker_id))
-seq_tbl_all <- data_all %>%
+  filter(marker_id %in% as.character(data_follow$marker_id))
+seq_tbl_all <- data_follow %>%
     mutate(seq_id = map_chr(sequence, digest::digest))
 #########################################function#########################################
 #call variants function
@@ -207,21 +215,37 @@ vars <- call_vars(
   )
 vars <- vars %>%
     dplyr::select(marker_id, var_id, type)
-#Get SNP number
-snps <- vars %>%
-    group_by(marker_id) %>%
-    summarise(SNPs = n()) %>%
-    ungroup()
-snps
 
-del <- vars %>%
+#Get vars number
+all_vars <- vars %>%
+    group_by(marker_id) %>%
+    summarise(vars = n()) %>%
+    ungroup()
+all_vars
+
+ins <- vars %>%
     group_by(marker_id) %>%
   filter(type == "INS") %>%
     summarise(n = n())%>%
     #summarise(del = n()) %>%
     ungroup()
+ins
 
+snps <- vars %>%
+    group_by(marker_id) %>%
+  filter(type == "SNP") %>%
+    summarise(n = n())%>%
+    #summarise(del = n()) %>%
+    ungroup()
+snps
 
+del <- vars %>%
+    group_by(marker_id) %>%
+  filter(type == "DEL") %>%
+    summarise(n = n())%>%
+    #summarise(del = n()) %>%
+    ungroup()
+del
 
 ```
 

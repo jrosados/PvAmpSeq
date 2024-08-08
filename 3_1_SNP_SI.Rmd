@@ -24,15 +24,15 @@ load("./intermediate_data/intermediate_data.RData")
 
 ```{r}
 #Data
-data_all <- hap_SI_epi %>%     
-  dplyr::select(sample_id, marker_id,sequence)
-
-# data_baseline <- read.csv("hap_SI_epi.csv") %>%     
-#   filter(infoD==0) %>% 
+# data_all <- hap_SI_epi %>%     
 #   dplyr::select(sample_id, marker_id,sequence)
+
+data_baseline <- hap_SI_epi %>%
+  filter(infoD==0) %>%
+  dplyr::select(sample_id, marker_id,sequence)
 # 
-# data_follow <- read.csv("hap_SI_epi.csv") %>%     
-#   filter(!infoD==0) %>% 
+# data_follow <- hap_SI_epi %>%
+#   filter(!infoD==0) %>%
 #   dplyr::select(sample_id, marker_id,sequence)
 
 marker_info <- read.csv(here("raw_data","marker_info.csv"))
@@ -40,8 +40,8 @@ marker_info <- read.csv(here("raw_data","marker_info.csv"))
 # Get the variant position
 all_markers <- marker_info
 all_markers <- all_markers %>%
-  filter(marker_id %in% as.character(data_all$marker_id))
-seq_tbl_all <- data_all %>%
+  filter(marker_id %in% as.character(data_baseline$marker_id))
+seq_tbl_all <- data_baseline %>%
     mutate(seq_id = map_chr(sequence, digest::digest))
 #########################################function#########################################
 #call variants function
@@ -214,19 +214,36 @@ vars <- call_vars(
   )
 vars <- vars %>%
     dplyr::select(marker_id, var_id, type)
-#Get SNP number
-snps <- vars %>%
+#Get vars number
+all_vars <- vars %>%
     group_by(marker_id) %>%
-    summarise(SNPs = n()) %>%
+    summarise(vars = n()) %>%
     ungroup()
-snps
+all_vars
 
-del <- vars %>%
+ins <- vars %>%
     group_by(marker_id) %>%
   filter(type == "INS") %>%
     summarise(n = n())%>%
     #summarise(del = n()) %>%
     ungroup()
+ins
+
+snps <- vars %>%
+    group_by(marker_id) %>%
+  filter(type == "SNP") %>%
+    summarise(n = n())%>%
+    #summarise(del = n()) %>%
+    ungroup()
+snps
+
+del <- vars %>%
+    group_by(marker_id) %>%
+  filter(type == "DEL") %>%
+    summarise(n = n())%>%
+    #summarise(del = n()) %>%
+    ungroup()
+del
 
 
 
