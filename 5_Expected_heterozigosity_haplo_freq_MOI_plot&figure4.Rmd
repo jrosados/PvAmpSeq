@@ -705,8 +705,8 @@ r <- ggdraw() +
   draw_plot(Hap_freq_Chr02_SI_plot, x = 0.5, y = .827, width = .25, height = .13) +
   draw_plot(Hap_freq_Chr07_SI_plot, x = 0.5, y = .794, width = .25, height = .13) +
   draw_plot(Hap_freq_Chr14_SI_plot, x = 0.5, y = .761, width = .25, height = .13) +
-  draw_plot(Hap_freq_Chr09_SI_plot, x = 0.5, y = .728, width = .25, height = .13) +
-  draw_plot(Hap_freq_Chr13_SI_plot, x = 0.5, y = .695, width = .25, height = .13) +
+  draw_plot(Hap_freq_Chr13_SI_plot, x = 0.5, y = .728, width = .25, height = .13) +
+  draw_plot(Hap_freq_Chr09_SI_plot, x = 0.5, y = .695, width = .25, height = .13) +
   draw_plot(Hap_freq_Chr10_SI_plot, x = 0.5, y = .662, width = .25, height = .13) +
   draw_plot(Hap_freq_Chr03_SI_plot, x = 0.5, y = .629, width = .25, height = .13) +
   draw_plot(Hap_freq_Chr11_SI_plot, x = 0.5, y = .596, width = .25, height = .13) +
@@ -718,8 +718,8 @@ r <- ggdraw() +
   draw_plot(Hap_freq_Chr08_PE_plot, x = .75, y = .761, width = .25, height = .13) +
   draw_plot(Hap_freq_Chr13_PE_plot, x = .75, y = .728, width = .25, height = .13) +
   draw_plot(Hap_freq_Chr02_PE_plot, x = .75, y = .695, width = .25, height = .13) +
-  draw_plot(Hap_freq_Chr09_PE_plot, x = .75, y = .662, width = .25, height = .13) +
-  draw_plot(Hap_freq_Chr14_PE_plot, x = .75, y = .629, width = .25, height = .13) +
+  draw_plot(Hap_freq_Chr14_PE_plot, x = .75, y = .662, width = .25, height = .13) +
+  draw_plot(Hap_freq_Chr09_PE_plot, x = .75, y = .629, width = .25, height = .13) +
   draw_plot(Hap_freq_Chr03_PE_plot, x = .75, y = .596, width = .25, height = .13) +
   draw_plot(Hap_freq_Chr01_PE_plot, x = .75, y = .563, width = .25, height = .13) +
   draw_plot(Hap_freq_Chr10_PE_plot, x = .75, y = .51, width = .25, height = .15) +
