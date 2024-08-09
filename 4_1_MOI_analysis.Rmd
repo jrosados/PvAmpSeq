@@ -130,7 +130,7 @@ print(table_max_moi_PE,showAllLevels = TRUE,
 
 ```
 
-##Correlation age and MOI Supp_figure3
+##Correlation age and MOI Supp_figure5
 ```{r, echo=FALSE}
 
 age_moi_SI<- hap_SI_epi %>% 
@@ -177,17 +177,17 @@ table_age_moi_PE<- CreateTableOne(vars = c("max_moi","age"), strata = "max_moi",
 print(table_age_moi_PE,showAllLevels = TRUE,
       nonnormal = "age")
 
-Supp_figure3<-ggarrange(age_moi_SI, age_moi_PE,
+Supp_figure5<-ggarrange(age_moi_SI, age_moi_PE,
                               ncol=2, nrow=1, common.legend = F, legend="none")
 
-print(Supp_figure3)
+print(Supp_figure5)
 
-ggsave("figs/Supp_figure3.tiff", units="cm", width=12, height=8.12, dpi=300, compression = 'lzw')
+ggsave("figs/Supp_figure5.tiff", units="cm", width=12, height=8.12, dpi=300, compression = 'lzw')
 
 
 ```
 
-##Distribution Symp_Asymp and MOI Supp_figure4
+##Distribution Symp_Asymp and MOI Supp_figure6
 ```{r, echo=FALSE}
   
 #######
@@ -271,12 +271,12 @@ print(table_sym_moi_PE,showAllLevels = TRUE,
       nonnormal = "max_moi")
 
 
-Supp_figure4<-ggarrange(symp_moi_SI_hist, symp_moi_PE_hist,
-                              ncol=2, nrow=1, common.legend = TRUE, legend="right")
+Supp_figure6<-ggarrange(symp_moi_SI_hist, symp_moi_PE_hist,
+                              ncol=2, nrow=1, common.legend = TRUE, legend="bottom")
 
-print(Supp_figure4)
+print(Supp_figure6)
 
-ggsave("figs/Supp_figure4.tiff", units="cm", width=12, height=8.12, dpi=300, compression = 'lzw')
+ggsave("figs/Supp_figure6.tiff", units="cm", width=12, height=8.12, dpi=300, compression = 'lzw')
 
 ```
 
@@ -433,14 +433,14 @@ days_recurr_moi<-ggarrange(days_recurr_moi_plot, days_recurr_change_moi_plot,
                               ncol=1, nrow=2, common.legend = TRUE, legend="right")
 
 
-Supp_figure5 <- ggdraw() +
+Supp_figure7 <- ggdraw() +
   draw_plot(days_recurr_moi, x = 0.005,y = 0, width = .89, height = 0.99) +
   draw_plot_label(label = c("A", "B"), size = 12,
                  x = c(0,0), y = c(1, 0.5))
 
-print(Supp_figure5)
+print(Supp_figure7)
 
-ggsave("figs/Supp_figure5.tiff", units="cm", width=25.14, height=18.12, dpi=300, compression = 'lzw')
+ggsave("figs/Supp_figure7.tiff", units="cm", width=25.14, height=18.12, dpi=300, compression = 'lzw')
 
 ```
 
