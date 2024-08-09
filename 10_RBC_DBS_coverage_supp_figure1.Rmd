@@ -178,7 +178,7 @@ Supp_figure2 <- ggdraw() +
 print(Supp_figure2)
 
 
-ggsave("figs/Supp_figure2.tiff", units="cm", width=25, height=25, dpi=300, compression = 'lzw')
+ggsave("figs/Supp_figure1.tiff", units="cm", width=25, height=25, dpi=300, compression = 'lzw')
 
 
 
