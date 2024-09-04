@@ -176,7 +176,7 @@ Haplo_Class_all_SI <-
                                    !is.na(Chr13_NewMarker), 
                                    !is.na(Chr14_NewMarker)) * he_marker_SI$he)) %>% 
   mutate(Prop_NewMarker_weightedHe = N_heterologuous_weightedHe/N_eval_weightedHe,
-         Classification= ifelse(Prop_NewMarker_weightedHe >=0.75, "Heterologous", "Homologous")) %>% 
+         Classification= ifelse(Prop_NewMarker_weightedHe >=0.5, "Heterologous", "Homologous")) %>% 
   # Most informative chromosomes
   rowwise() %>% 
   mutate(N_heterologuous_top8 = sum(Chr02_NewMarker, 
@@ -197,7 +197,7 @@ Haplo_Class_all_SI <-
                                         Chr13_NewMarker, 
                                         Chr14_NewMarker)))) %>% 
   mutate(Prop_NewMarker_top8 = N_heterologuous_top8 / N_eval_top8,
-         Consensus_top8 = ifelse(Prop_NewMarker_top8 >=0.75, "Heterologous", "Homologous")) %>% 
+         Consensus_top8 = ifelse(Prop_NewMarker_top8 >=0.5, "Heterologous", "Homologous")) %>% 
   # Weighted version for top8 chromosomes
   rowwise() %>% 
   mutate(N_heterologuous_top8_weightedHe = sum(c(Chr02_NewMarker * he_marker_SI$he[he_marker_SI$marker_id == "Chr02"], 
@@ -230,7 +230,7 @@ Haplo_Class_all_SI <-
                                         Chr05_NewMarker, 
                                         Chr07_NewMarker)))) %>% 
   mutate(Prop_NewMarker_top4 = N_heterologuous_top4 / N_eval_top4,
-         Consensus_top4 = ifelse(Prop_NewMarker_top4 >=0.75, "Heterologous", "Homologous")) %>% 
+         Consensus_top4 = ifelse(Prop_NewMarker_top4 >=0.5, "Heterologous", "Homologous")) %>% 
   # Weighted version for top4 chromosomes
   rowwise() %>% 
   mutate(N_heterologuous_top4_weightedHe = sum(c(Chr02_NewMarker * he_marker_SI$he[he_marker_SI$marker_id == "Chr02"], 
@@ -396,7 +396,7 @@ Haplo_Class_all_PE <-
                                    !is.na(Chr13_NewMarker), 
                                    !is.na(Chr14_NewMarker)) * he_marker_PE$he)) %>% 
   mutate(Prop_NewMarker_weightedHe = N_heterologuous_weightedHe/N_eval_weightedHe,
-         Classification = ifelse(Prop_NewMarker_weightedHe >=0.75, "Heterologous", "Homologous")) %>% 
+         Classification = ifelse(Prop_NewMarker_weightedHe >=0.5, "Heterologous", "Homologous")) %>% 
   # Most informative chromosomes
   rowwise() %>% 
   mutate(N_heterologuous_top8 = sum(Chr02_NewMarker, 
@@ -417,7 +417,7 @@ Haplo_Class_all_PE <-
                                         Chr13_NewMarker, 
                                         Chr14_NewMarker)))) %>% 
   mutate(Prop_NewMarker_top8 = N_heterologuous_top8 / N_eval_top8,
-         Consensus_top8 = ifelse(Prop_NewMarker_top8 >=0.75, "Heterologous", "Homologous")) %>% 
+         Consensus_top8 = ifelse(Prop_NewMarker_top8 >=0.5, "Heterologous", "Homologous")) %>% 
   # Weighted version for top8 chromosomes
   rowwise() %>% 
   mutate(N_heterologuous_top8_weightedHe = sum(c(Chr02_NewMarker * he_marker_PE$he[he_marker_PE$marker_id == "Chr02"], 
@@ -450,7 +450,7 @@ Haplo_Class_all_PE <-
                                         Chr07_NewMarker, 
                                         Chr08_NewMarker)))) %>% 
   mutate(Prop_NewMarker_top4 = N_heterologuous_top4 / N_eval_top4,
-         Consensus_top4 = ifelse(Prop_NewMarker_top4 >=0.75, "Heterologous", "Homologous")) %>% 
+         Consensus_top4 = ifelse(Prop_NewMarker_top4 >=0.5, "Heterologous", "Homologous")) %>% 
   # Weighted version for top4 chromosomes
   rowwise() %>% 
   mutate(N_heterologuous_top4_weightedHe = sum(c(Chr05_NewMarker * he_marker_PE$he[he_marker_PE$marker_id == "Chr05"], 
@@ -477,7 +477,9 @@ dist_Haplo_class_SI_first_rec<- Haplo_Class_all_SI %>%
          Prop_het= (1- Prop_NewMarker_weightedHe),
          identity = cut(Prop_NewMarker_weightedHe, breaks = c(-Inf,0,0.75,1)))%>%
          select(sample,Patient,date,treatment,treatment2, recurrence,Prop_het,delay_since_prev_ep,change_moi,max_moi,clones,identity, Classification) %>%
-ggplot(aes(x = Prop_het, fill=Classification)) + 
+ggplot(aes(x = Prop_het
+           #, fill=Classification
+           )) + 
   geom_histogram(binwidth = 0.05) + ggtitle("Solomon Islands")+
 xlab(bquote(1 - P [NH])) + ylab("Frequency") +
   scale_fill_brewer(palette="Paired") + expand_limits(x=c(0, 1))+ coord_cartesian(ylim=c(0, 20))+  scale_x_continuous(breaks = c(0.00,0.25,0.50,0.75,1.00), labels = c("0" = "0.00","0.25" = "0.25","0.50" = "0.50","0.75" = "0.75","1.00"= "1.00"))+
@@ -515,7 +517,9 @@ dist_Haplo_class_PE_first_rec<-
   mutate(Prop_het= (1- Prop_NewMarker_weightedHe),
          identity = cut(Prop_NewMarker_weightedHe, breaks = c(-Inf,0,0.75,1)))%>%
   select(sample,Patient,date,treatment, recurrence,Prop_het,delay_since_prev_ep,change_moi,max_moi,clones,identity, Classification) %>%
-ggplot(aes(x = Prop_het, fill=Classification)) + 
+ggplot(aes(x = Prop_het
+           #, fill=Classification
+           )) + 
   geom_histogram(binwidth = 0.05) + ggtitle("Peru")+
 xlab(bquote(1 - P [NH])) + ylab("Frequency") +
   scale_fill_brewer(palette="Paired") +
