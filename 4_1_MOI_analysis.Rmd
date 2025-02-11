@@ -147,7 +147,7 @@ age_moi_SI<- hap_SI_epi %>%
   theme(axis.text.x = element_text(face = "plain", color="black", size = 8, angle = 90), legend.position = "none") 
 
 print(age_moi_SI)
-cor.test(age_moi_SI$data$max_moi, age_moi_SI$data$max_moi)
+cor.test(age_moi_SI$data$age_y, age_moi_SI$data$max_moi)
 
 table_age_moi_SI<- CreateTableOne(vars = c("max_moi","age_y"), strata = "max_moi", data = age_moi_SI$data, 
                factorVars =c("max_moi"))
@@ -169,7 +169,7 @@ age_moi_PE<- hap_PE_epi %>%
   theme_classic(base_size = 12) + 
   theme(axis.text.x = element_text(face = "plain", color="black", size = 8, angle = 90), legend.position = "none") 
 
-cor.test(age_moi_PE$data$max_moi, age_moi_PE$data$max_moi)
+cor.test(age_moi_PE$data$age, age_moi_PE$data$max_moi)
 
 table_age_moi_PE<- CreateTableOne(vars = c("max_moi","age"), strata = "max_moi", data = age_moi_PE$data, 
                factorVars =c("max_moi"))
@@ -453,8 +453,13 @@ print(table_days_recurr_moi_PE,showAllLevels = TRUE,
 
 table_days_recurr_change_moi_PE<- CreateTableOne(vars = c("delay_since_prev_ep"), strata = "change", data = days_recurr_change_moi_PE )
 
+wilcox.test(days_recurr_change_moi_PE$delay_since_prev_ep ~ days_recurr_change_moi_PE$clones, alternative = "two.sided")
+
 print(table_days_recurr_change_moi_PE,showAllLevels = TRUE,
       nonnormal = "delay_since_prev_ep")
+
+kruskal.test(days_recurr_change_moi_PE$delay_since_prev_ep ~ days_recurr_change_moi_PE$change)
+
 
 table_days_recurr_moi_SI<- CreateTableOne(vars = c("delay_since_prev_ep"), strata = "clones", data = days_recurr_change_moi_SI)
 
@@ -463,8 +468,13 @@ print(table_days_recurr_moi_SI,showAllLevels = TRUE,
 
 table_days_recurr_change_moi_SI<- CreateTableOne(vars = c("delay_since_prev_ep"), strata = "change", data = days_recurr_change_moi_SI)
 
+wilcox.test(days_recurr_change_moi_SI$delay_since_prev_ep ~ days_recurr_change_moi_SI$clones, alternative = "two.sided")
+
+
 print(table_days_recurr_change_moi_SI,showAllLevels = TRUE,
       nonnormal = "delay_since_prev_ep")
+
+kruskal.test(days_recurr_change_moi_SI$delay_since_prev_ep ~ days_recurr_change_moi_SI$change)
 ```
 
 #MOI splitted into baseline and recurrent _ MOI_day0_dayX_paired
@@ -578,6 +588,8 @@ table_max_moi_SI_paired<- CreateTableOne(vars = c("max_moi","clones"), strata = 
 print(table_max_moi_SI_paired,showAllLevels = TRUE,
       nonnormal = c("clones"))
 
+wilcox.test(MOI_day0_dayX_paired_SI$data$max_moi ~ MOI_day0_dayX_paired_SI$data$day, alternative = "two.sided")
+
 table1(~max_moi + clones| day, data =  MOI_day0_dayX_paired_PE$data, 
        render.missing = NULL,
        render.categorical = "FREQ (PCTnoNA%)",
@@ -588,6 +600,9 @@ table_max_moi_PE_paired<- CreateTableOne(vars = c("max_moi","clones"), strata = 
 
 print(table_max_moi_PE_paired,showAllLevels = TRUE,
       nonnormal = c("clones"))
+
+wilcox.test(MOI_day0_dayX_paired_PE$data$max_moi ~ MOI_day0_dayX_paired_PE$data$day, alternative = "two.sided")
+
 
 
 ```
