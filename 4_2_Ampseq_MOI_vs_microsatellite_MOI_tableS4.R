@@ -1,6 +1,6 @@
 
 ########################################################
-# COMPARING AMPSEQ MOI VS MICROSATELLITE MOI , Table S5 #
+# COMPARING AMPSEQ MOI VS MICROSATELLITE MOI , Table S4 #
 #######################################################
 
 #Microsatellite data extracted from Manrique et al. 

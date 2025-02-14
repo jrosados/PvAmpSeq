@@ -28,6 +28,7 @@ library(cowplot)
 library(ggh4x)
 library(table1)
 library(tableone) 
+library(stats)
 ```
 
 ```{r echo=FALSE, message=F, warning=F}
@@ -111,8 +112,19 @@ reads_parasite_per_marker_SI <-
     group_by(marker_id) %>% 
   distinct() 
 
-#Correlation parasite density and reads
-cor.test(reads_parasite_per_marker_SI$parasites_ul[reads_parasite_per_marker_SI$marker_id=="Chr05"], reads_parasite_per_marker_SI$count[reads_parasite_per_marker_SI$marker_id=="Chr05"])
+# Calculate correlation between parasites_ul and count stratified by marker_id
+
+# Perform correlation analysis stratified by marker_id
+correlation_results_SI <- reads_parasite_per_marker_SI %>%
+  group_by(marker_id) %>%
+  summarise(correlation = cor(parasites_ul, count, use = "complete.obs"),
+            p_value = cor.test(parasites_ul, count, method = "pearson")$p.value)
+
+# Adjust p-values using the Benjamini-Hochberg method (FDR)
+correlation_results_SI$adjusted_p_value <- p.adjust(correlation_results_SI$p_value, method = "fdr")
+
+range(correlation_results_SI$adjusted_p_value)
+range(correlation_results_SI$correlation)
 
 
 ########
@@ -138,8 +150,19 @@ reads_parasite_per_marker_PE<- hap_PE_epi %>%
   select(sample, copies_ul, parasites_uL, Cq,count,reads_mean,marker_id)%>%      group_by(marker_id) %>% 
   distinct() 
 
-#Correlation parasite density and reads
-cor.test(reads_parasite_per_marker_PE$parasites_uL[reads_parasite_per_marker_PE$marker_id=="Chr05"],reads_parasite_per_marker_PE$count[reads_parasite_per_marker_PE$marker_id=="Chr05"])
+# Calculate correlation between parasites_ul and count stratified by marker_id
+
+# Perform correlation analysis stratified by marker_id
+correlation_results_PE <- reads_parasite_per_marker_PE %>%
+  group_by(marker_id) %>%
+  summarise(correlation = cor(parasites_uL, count, use = "complete.obs"),
+            p_value = cor.test(parasites_uL, count, method = "pearson")$p.value)
+
+# Adjust p-values using the Benjamini-Hochberg method (FDR)
+correlation_results_PE$adjusted_p_value <- p.adjust(correlation_results_PE$p_value, method = "fdr")
+
+range(correlation_results_PE$adjusted_p_value)
+range(correlation_results_PE$correlation)
 
 ```
 ##Plotting number of reads per marker
