@@ -3,6 +3,8 @@
 library(tidyverse)
 library(here)
 library(patchwork)
+library(janitor)
+library(ggpubr)
 
 # Load data ---------------------------------------------------------------
 
@@ -11,8 +13,8 @@ peru_all_meta <- readRDS(here("data/final", "peru_all_meta.rds"))
 sols_sig_meta <- readRDS(here("data/final", "sols_sig_meta.rds")) 
 peru_sig_meta <- readRDS(here("data/final", "peru_sig_meta.rds"))
 
-load("outputs/Pv3Rs_sols_posteriors_20240827_181146.RData")
-load("outputs/Pv3Rs_peru_posteriors_20240904_010047.RData")
+# load("outputs/Pv3Rs_sols_posteriors_20240827_181146.RData")
+# load("outputs/Pv3Rs_peru_posteriors_20240904_010047.RData")
 
 # Wrangle data ------------------------------------------------------------
 
@@ -516,3 +518,40 @@ ggplot(melt(confusion_data_ibdstate_peru), aes(ibd_classification, variable, fil
        y = "Probabilistic classification",
        fill = "Count") +
   plot_annotation(tag_levels = "a")
+
+# Further analysis --------------------------------------------------------
+
+# •	For those that are highly probable a relapse or reinfection – distribution of days since last episode
+classification_summary_sols %>% 
+  ggplot(aes(x= joint_classification, y = days_since_last_episode, group = joint_classification, fill = joint_classification)) +
+  geom_boxplot(alpha = 0.5) +
+  stat_kruskal_test() +
+  scale_fill_manual(values = c("Relapse" = "turquoise3",
+                               "Recrudescence" = "skyblue4",
+                               "Reinfection" = "magenta3")) +
+  theme_minimal()
+
+
+# For those with recrudescence treatment type?
+# PQ vs no PQ – any trends? 
+
+classification_summary_sols %>% 
+  ggplot(aes(x= joint_classification, y = days_since_last_episode, group = joint_classification, fill = joint_classification)) +
+  geom_boxplot(alpha = 0.5) +
+  stat_kruskal_test() +
+  scale_fill_manual(values = c("Relapse" = "turquoise3",
+                               "Recrudescence" = "skyblue4",
+                               "Reinfection" = "magenta3")) +
+  facet_wrap(treatment_arm~.) +
+  theme_minimal()
+
+
+classification_summary_sols %>% 
+  ggplot(aes(x = treatment_arm, y = days_since_last_episode, group = treatment_arm, fill = joint_classification)) +
+  geom_boxplot(alpha = 0.5) +
+  stat_kruskal_test() +
+  scale_fill_manual(values = c("Relapse" = "turquoise3",
+                               "Recrudescence" = "skyblue4",
+                               "Reinfection" = "magenta3")) +
+  facet_wrap(joint_classification~.) +
+  theme_minimal()
