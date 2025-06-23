@@ -1,0 +1,248 @@
+---
+title: "Pv3Rs false discovery rate UPDATE"
+author: "Shazia Ruybal-Pesántez"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(Pv3Rs)
+library(rsample)
+
+source("helper_functions.R")
+```
+
+# Solomon Islands
+## Update null distribution analysis
+```{r input data}
+sols <- read.csv(here("data/final", "sols_raw_data.csv"))
+
+sols_all_patients <- sols %>%
+        clean_names() %>% 
+        select(sample, info, info_d, episode_type = follow_x, episodes, trtgrp, trt_label, vis_date) %>% 
+        distinct() %>% 
+        arrange(sample)
+```
+
+```{r eval=F}
+sols_all_patients %>%
+  distinct(info, episodes) %>%
+  ggplot(aes(x = episodes)) +
+    geom_bar() +
+    scale_x_continuous(breaks = scales::pretty_breaks(n=5)) +
+    theme_bw()
+```
+
+## Randomization pipeline once
+```{r eval=F}
+random_pairs <- randomize_pairs_sols(sols_all_patients)
+
+plot_new_pairs_sols(random_pairs) + labs(subtitle = "Iteration 1")
+
+analysis_data <- get_analysis_data_sols(random_pairs)
+
+fs <- analysis_data %>% 
+  calculate_freqs() %>% 
+  pluck("fs")
+
+test <- compute_null(analysis_data, fs, gv)
+test_marginal_summary <- test %>% 
+  pluck("indiv_posteriors_marginal") %>% 
+  get_marginal_summary()
+
+test_joint_summary <- test %>% 
+  pluck("indiv_posteriors_joint") %>% 
+  get_joint_summary()
+
+# plot_episode_prob(test_marginal_summary)
+get_marginal_stats_summary(test_marginal_summary)
+```
+
+## Randomization iterations
+```{r simulate}
+N_sim <- 100
+
+marginal_results <- map_dfr(1:N_sim, function(i) {
+
+  # 1) Randomize & preprocess
+  random_pairs <- {
+    set.seed(i)
+    randomize_pairs_sols(sols_all_patients)
+  }
+  
+  # p <- plot_new_pairs_sols(random_pairs) + labs(subtitle = str_glue("Iteration {i}"))
+  # print(p)
+  
+  analysis_data <- get_analysis_data_sols(random_pairs)
+  
+  # 2) Freqs
+  fs <- analysis_data %>%
+    calculate_freqs() %>% 
+    pluck("fs")
+  
+  # 3) compute Pv3Rs for each simualted dataset
+  gv <- set_global_vars()
+  
+  results <- compute_null(analysis_data, fs, gv)
+  
+  #  get stats for posterior distribution of each classification
+  # and get N's and %s for each classification 
+  results %>%
+    pluck("indiv_posteriors_marginal") %>%
+    get_marginal_summary() %>%
+    get_marginal_stats_summary() %>%
+    mutate(iteration = i)
+
+})
+```
+
+False discovery 'rate'
+```{r fdr}
+fdr_df <- marginal_results %>% 
+  # compute FDR
+  filter(posterior_classification == "Reinfection") %>%
+  transmute(iteration, 
+            fdr = 1-percent)
+
+fdr_df
+```
+
+```{r plot fdr}
+ggplot(fdr_df, aes(x = fdr)) +
+  geom_histogram(binwidth = 0.01, color = "black", fill = "grey") +
+  labs(
+    title = "Monte Carlo FDR distribution",
+    x     = "Estimated FDR",
+    y     = "Count"
+  ) +
+  theme_minimal()
+```
+
+95%CI confidence interval: trying two methods
+```{r conf intervals}
+# Normal approximation
+get_fdr_summary(fdr_df)
+
+# Bootstrapping
+get_fdr_bs_summary(fdr_df, 1000)
+```
+
+# Peru
+
+## Update null distribution analysis
+```{r input data}
+peru <- read.csv(here("data/final", "merged_PE.csv"))
+
+peru_all_patients <- peru %>%
+        clean_names() %>% 
+        select(sample, info = patient_name, date, episode_type = day, episodes) %>% 
+        distinct() %>% 
+        arrange(sample) %>% 
+        mutate(date = mdy(date))
+```
+
+```{r eval=F}
+peru_all_patients %>% 
+  distinct(info, episodes) %>%
+  ggplot(aes(x = episodes)) +
+    geom_bar() +
+    scale_x_continuous(breaks = scales::pretty_breaks(n=5)) +
+    theme_bw()
+```
+
+## Randomization pipeline once
+```{r eval=F}
+random_pairs <- randomize_pairs_peru(peru_all_patients)
+
+plot_new_pairs_peru(random_pairs) + labs(subtitle = "Iteration 1")
+
+analysis_data <- get_analysis_data_peru(random_pairs)
+
+fs <- analysis_data %>% 
+  calculate_freqs() %>% 
+  pluck("fs")
+
+gv <- set_global_vars(PRIOR_3RS = c("C" = 0.10, "L" = 0.45, "I" = 0.45))
+test <- compute_null(analysis_data, fs, gv)
+
+test_marginal_summary <- test %>% 
+  pluck("indiv_posteriors_marginal") %>% 
+  get_marginal_summary()
+
+test_joint_summary <- test %>% 
+  pluck("indiv_posteriors_joint") %>% 
+  get_joint_summary()
+
+# plot_episode_prob(test_marginal_summary)
+get_marginal_stats_summary(test_marginal_summary)
+```
+
+## Randomization iterations
+```{r simulate}
+N_sim <- 100
+
+marginal_results <- map_dfr(1:N_sim, function(i) {
+
+  # 1) Randomize & preprocess
+  random_pairs <- {
+    set.seed(i)
+    randomize_pairs_peru(peru_all_patients)
+  }
+  
+  # p <- plot_new_pairs_peru(random_pairs) + labs(subtitle = str_glue("Iteration {i}"))
+  # print(p)
+  
+  analysis_data <- get_analysis_data_peru(random_pairs)
+  
+  # 2) Freqs
+  fs <- analysis_data %>%
+    calculate_freqs() %>% 
+    pluck("fs")
+  
+  # 3) compute Pv3Rs for each simualted dataset
+  gv <- set_global_vars(PRIOR_3RS = c("C" = 0.10, "L" = 0.45, "I" = 0.45))
+  
+  results <- compute_null(analysis_data, fs, gv)
+  
+  #  get stats for posterior distribution of each classification
+  # and get N's and %s for each classification 
+  results %>%
+    pluck("indiv_posteriors_marginal") %>%
+    get_marginal_summary() %>%
+    get_marginal_stats_summary() %>%
+    mutate(iteration = i)
+
+})
+```
+
+False discovery 'rate'
+```{r fdr}
+fdr_df <- marginal_results %>% 
+  # compute FDR
+  filter(posterior_classification == "Reinfection") %>%
+  transmute(iteration, 
+            fdr = 1-percent)
+
+fdr_df
+```
+
+```{r plot fdr}
+ggplot(fdr_df, aes(x = fdr)) +
+  geom_histogram(binwidth = 0.01, color = "black", fill = "grey") +
+  labs(
+    title = "Monte Carlo FDR distribution",
+    x     = "Estimated FDR",
+    y     = "Count"
+  ) +
+  theme_minimal()
+```
+
+95%CI confidence interval: trying two methods
+```{r conf intervals}
+# Normal approximation
+get_fdr_summary(fdr_df)
+
+# Bootstrapping
+get_fdr_bs_summary(fdr_df, 1000)
+```

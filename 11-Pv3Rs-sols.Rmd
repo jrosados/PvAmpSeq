@@ -1,0 +1,1408 @@
+---
+title: "Running Pv3Rs for Solomon Islands data"
+author: "Shazia Ruybal-Pesántez"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide 
+    code_download: true
+    fig_width: 8
+    fig_height: 6
+    theme: cosmo
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(janitor)
+library(here)
+library(patchwork)
+library(RColorBrewer)
+library(reshape2)
+
+# install.packages('Pv3Rs', repos = c('https://plasmogenepi.r-universe.dev', 'https://cloud.r-project.org'))
+
+# devtools::install_github("aimeertaylor/Pv3Rs")
+# Pv3Rs downloaded from Github on 7 Aug 2024
+library(Pv3Rs)
+```
+
+## Set global variables
+From TO/JS - This section sets some flags that can be tweaked to re-run the analysis with different filtering parameters:
+
+`RUN_EXAMPLE`: allows discarding alleles that have a frequency below a threshold (defaults to FALSE),
+`WITHIN_INDIVIDUAL_ALLELE_FREQ_THR`: allows discarding alleles that have a frequency below a threshold (defaults to 0),
+`BENCHMARK_MARKERS`: list of markers to include in the analysis (defaults to the full list established by Jason, could be reduced down to 3 for memory optimization),
+`MAX_MOI_TO_INCLUDE`: allows discarding participant data when they exhibit very complex infection patterns, counted as the total number of clones across all infection events (defaults to 8),
+`PRIOR_3RS`: a named vector with prior probabilities of recrudescence (C), relapse (L) or reinfection (I) (defaults to uniform, i.e. 1/3 each, but tweaked to minimize recrudescence in the present study).
+
+```{r global vars}
+## RUN_EXAMPLE
+##   Boolean flag to enable/disable running the example Pv3Rs posterior 
+##   computation on a single episode sampled at random from the dataset.
+## DEFAULT: FALSE
+RUN_EXAMPLE <- TRUE
+
+## WITHIN_INDIVIDUAL_ALLELE_FREQ_THR
+##   Minimum threshold above which an allele is preserved in individual
+##   haplotype data to be preserved when reconstructing infection 
+##   history. Note that this will *not* discard these alleles from the
+##   population-level allele frequency that is derived from the initial
+##   visit, but only discard that allele from individual observations 
+##   when it is 'too rare to be exploited'.
+## DEFAULT: 0
+WITHIN_INDIVIDUAL_ALLELE_FREQ_THR <- 0
+
+## BENCHMARK_MARKERS
+##   Vector of character string with names matching those from the 
+##   markers of interest for amplicon sequencing. Only the markers 
+##   listed in that vector will be preserved in individual-level data
+##   and identity of infection will be solely based on the alleles 
+##   observed for these markers.
+##   The markers are listed by importance as discovered by Jason.
+## DEFAULT: all markers (could be suboptimal/too memory-consuming?)
+BENCHMARK_MARKERS <- c(
+  "Chr05",
+  "Chr07", 
+  "Chr09", 
+  "Chr10",
+  "Chr08",
+  "Chr13",
+  "Chr11",
+  "Chr03",
+  "Chr01",
+  "Chr02",
+  "Chr14"
+)
+
+## MAX_MOI_TO_INCLUDE
+##   As per Aimee's guidelines: 
+##     We do not recommend running compute_posterior() for data 
+##     whose total genotype count exceeds eight, where the total 
+##     genotype count is the sum of per-episode maximum per-marker 
+##     allele counts.
+##   The MAX_MOI_TO_INCLUDE expects an integer that will discard all
+##   individuals having a summed MOI > 8 across all recorded episodes.
+## DEFAULT: 8
+MAX_MOI_TO_INCLUDE <- 8
+
+## PRIORS_3RS
+##   A vector of probabilities, summing to 1, corresponding to 
+##   the probability of each stage for the 3Rs for Pv episodes.
+##   The vector order is re(C)rudescence, re(L)apse, re(I)nfection.
+##   In this clinical trial, we assume recrudescence is possible so, 
+##   we use the default priors 
+## DEFAULT: c("C" = 1/3, "L" = 1/3, "I" = 1/3)
+PRIOR_3RS <- c("C" = 1/3, "L" = 1/3, "I" = 1/3)
+# Note: the below probabilities were used for SeroTAT study because it does not involve treatment at baseline
+# PRIOR_3RS <- c("C" = 0.10, "L" = 0.45, "I" = 0.45)
+```
+
+## Solomon Islands data curation
+
+Read in data from Solomon Islands:
+```{r load data}
+sols <- read.csv(here("data/final", "sols_raw_data.csv"))
+
+# head(sols)
+# names(sols)
+```
+
+### Number of unique haplotypes (ie marker cardinality):
+```{r unique haps}
+sols %>% 
+  group_by(marker_id) %>% 
+  summarise(unique_haplotypes = n_distinct(Haplotype))
+```
+
+### Counts of each haplotype:
+```{r hap counts}
+sols %>% count(marker_id, Haplotype)
+```
+
+### "MOI":
+```{r moi}
+sols %>% 
+  group_by(sample, marker_id) %>%
+  summarise(n_haplotypes = n(), .groups = 'drop') %>%
+  group_by(sample) %>% 
+  summarise(max_moi = max(n_haplotypes)) 
+```
+
+### Recurrences
+Participants with more than one episode for inference (n=41 participants, n=99 Pv isolates):
+```{r recurrences}
+sols %>% 
+  select(info, episodes) %>% 
+  distinct() %>% 
+  arrange(info) %>% 
+  filter(episodes>1) 
+
+ids_recurrent <- sols %>% clean_names() %>% filter(episodes > 1) %>% distinct(info)
+sols_recurrent <- sols %>% clean_names() %>%filter(episodes > 1)
+
+# setdiff(ids_recurrent$info, sols_recurrent$info)
+# setdiff(sols_recurrent$info, ids_recurrent$info)
+
+# sols_recurrent %>% distinct(sample) %>% arrange(sample) # 99 isolates
+```
+
+```{r plot recurrences, fig.height=8, fig.width=8}
+sols_recurrent %>% 
+  distinct(sample) %>% 
+  separate(sample, into = c("sample", "episode_day"), sep = "-(?=[0-9]+$)") %>% 
+  ggplot(aes(x = episode_day, y = sample)) +
+    geom_line(aes(group = sample), color = "darkgrey") +
+    geom_point() +
+    theme_bw()
+```
+
+### Data on episode number and time since last episode
+```{r episode summary}
+episode_summary <- sols_recurrent %>% 
+  distinct(info, info_d, vis_date, sample) %>% 
+  mutate(vis_date = mdy(vis_date)) %>%
+  arrange(info, vis_date) %>% 
+  group_by(info) %>% 
+  mutate(
+    # get the episode number
+    episode_number = row_number(),
+    # calculate days since enrolment, just a check with dates
+    days_since_enrolment = as.integer(vis_date - min(vis_date[info_d == 0])),
+    # calculate days since last episode using lag() and making enrolment episodes 0 days since last
+    days_since_last_episode = replace_na(as.integer(vis_date - lag(vis_date)), 0)
+  ) %>% 
+  ungroup()
+```
+
+
+## Haplotype frequencies
+We want to remove any haplotypes that appear only once at very low frequencies. Haplotypes should already be filtered to be observed in at least 2 samples and within-host frequency >=1% (in full dataset).
+
+```{r singletons}
+singleton_haps <- sols_recurrent %>% 
+  select(sample, marker_id, haplotype, frequency, count) %>% 
+  count(haplotype) %>% 
+  arrange(n) %>% 
+  filter(n==1) %>% 
+  pull(haplotype)
+
+sols_recurrent %>% 
+  filter(haplotype %in% singleton_haps) %>% 
+  ggplot(aes(x = haplotype, y = count)) +
+    geom_hline(yintercept = 100, linetype = "dashed") +
+    geom_point(aes(color = frequency, shape = follow_x), size = 3) +
+    labs(x = "singleton haplotype",
+         y = "read count",
+         color = "within-sample frequency",
+         shape = "timepoint") +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+```
+## Haplotypes for inference
+As per Aimee, to avoid bias due to within-host selection of recrudescent parasites, we use only enrolment episodes to estimate population-level alelle frequencies. So, we will filter out any haplotypes that do not appear at baseline (drop n=8 haplotypes). Details below on their within-sample frequencies and read counts.
+```{r haps for inference}
+# n=569 haps
+baseline_haps <- sols_recurrent %>% 
+  filter(follow_x == "baseline") %>% 
+  pull(haplotype)
+
+sols_recurrent %>% 
+  filter(!haplotype %in% baseline_haps) %>% 
+  select(sample, marker_id, haplotype, frequency, count) %>% 
+  arrange(frequency, count)
+```
+
+## Final data for inference
+```{r final analysis data}
+analysis_data <- sols_recurrent %>%
+  select(subject_id = info, 
+         sample_id = sample, 
+         treatment_arm = trt_label, 
+         days_since_treatment = info_d,
+         timepoint = follow_x,
+         visit_date = vis_date,
+         age_years = age_y, 
+         sex = gender, 
+         episodes, 
+         marker_id, 
+         haplotype, 
+         type,
+         frequency,
+         mean_moi,
+         max_moi) %>% 
+  # add extra epi info on episode number and time since last episode
+  left_join(episode_summary %>% select(subject_id = info, 
+                                       sample_id = sample, 
+                                       episode_number,
+                                       days_since_enrolment,
+                                       days_since_last_episode),
+            by = c("subject_id", "sample_id"))  %>% 
+  # keep only haplotypes present at baseline
+  filter(haplotype %in% baseline_haps) %>% 
+  # ensure dates are date class
+  mutate(visit_date = mdy(visit_date)) 
+```
+
+### Baseline allele frequencies
+```{r test allele freqs, eval=F}
+test_df <- analysis_data %>% 
+  # Use only baseline samples
+  filter(timepoint == "baseline") %>% 
+  # filter data frame by marker
+  filter(marker_id == "Chr11")
+
+test_df %>% 
+      mutate(haplotype = factor(haplotype)) %>% 
+      select(sample_id, haplotype, frequency) %>% 
+      pivot_wider(names_from = haplotype, 
+                  values_from = frequency, 
+                  values_fill = 0) %>% 
+      pivot_longer(cols = -sample_id, 
+                   names_to = "haplotype", 
+                   values_to = "frequency") %>% 
+      # Get population-level haplotype frequency, 
+      # correcting for when within-individual sum is not equal 
+      # to 1, as can happen when a minority clone is <2% 
+      group_by(sample_id) %>% 
+      mutate(frequency = frequency / sum(frequency, na.rm = TRUE)) %>% 
+  
+      # get population-level mean freq
+      group_by(haplotype) %>% 
+      summarise(poplevel_mean_freq = mean(frequency, na.rm = TRUE)) %>% 
+      adorn_totals("row")
+```
+
+```{r baseline allele freqs}
+## Derive baseline allele frequency - This is modified from Thomas/Jason script for our data
+baseline_fs <- analysis_data %>% 
+  
+  # Use only baseline samples
+  filter(timepoint == "baseline") %>% 
+  
+  # split data frame by marker
+  group_by(marker_id) %>% 
+  group_split() %>% 
+  
+  # Derive a within-marker list of frequencies, by individual
+  lapply(function(x) {
+    x <- x %>% 
+      # Build a within-individual frequency table that 
+      # always includes every haplotype (even the ones absent)
+      mutate(haplotype = factor(haplotype)) %>% 
+      select(sample_id, haplotype, frequency) %>% 
+      pivot_wider(names_from = haplotype, 
+                  values_from = frequency, 
+                  values_fill = 0) %>% 
+      pivot_longer(cols = -sample_id, 
+                   names_to = "haplotype", 
+                   values_to = "frequency") %>% 
+      # Get population-level haplotype frequency, 
+      # correcting for when within-individual sum is not equal 
+      # to 1, as can happen when a minority clone is <2%
+      group_by(sample_id) %>% 
+      mutate(frequency = frequency / sum(frequency, na.rm = TRUE)) %>% 
+      group_by(haplotype) %>% 
+      summarise(frequency_pop_mean = mean(frequency, na.rm = TRUE))
+    
+    return(deframe(x))
+  }) %>% 
+  # get marker_id from group_keys from the group dfs 
+  setNames(nm = analysis_data %>% group_by(marker_id) %>% group_keys() %>% pull(marker_id))
+
+# Here we can also save as dataframe for easier printing and table-ready for paper
+baseline_fs_df <- analysis_data %>% 
+  # Use only baseline samples
+  filter(timepoint == "baseline") %>% 
+  
+  # Group by marker_id and sample_id for further calculations
+  group_by(marker_id, sample_id) %>% 
+  
+  # Build a within-individual frequency table that always includes every haplotype (even the ones absent)
+  mutate(haplotype = factor(haplotype)) %>% 
+  select(marker_id, sample_id, haplotype, frequency) %>% 
+  pivot_wider(names_from = haplotype, values_from = frequency, values_fill = list(frequency = 0)) %>% 
+  pivot_longer(cols = -c(marker_id, sample_id), names_to = "haplotype", values_to = "frequency") %>% 
+  
+  # Get population-level haplotype frequency, correcting for when within-individual sum is not equal to 1
+  group_by(marker_id, sample_id) %>% 
+  mutate(frequency = frequency / sum(frequency, na.rm = TRUE)) %>% 
+  group_by(marker_id, haplotype) %>% 
+  summarise(frequency_pop_mean = mean(frequency, na.rm = TRUE), .groups = 'drop') %>% 
+  
+  # Ensure haplotypes are correctly associated with their marker_id - note that this works for us because , in future would have to make this flexible to allow for haplotype names that are not reliant on having marker_id
+  filter(str_detect(haplotype, marker_id))
+
+baseline_fs_df
+```
+
+## Pv3Rs
+### Example on one participant: AR-067
+```{r pv3rs one example}
+# This has been modified from Thomas/Jason script 
+
+## Pick an individual at random to run Pv3Rs
+# indiv_name <- sample(unique(analysis_data$subject_id), size = 1)
+indiv_name <- "AR-067"
+
+## Prepare the data
+# 1- Subset haplotype data to specific individual and apply filters
+indiv_haplotype_data <- analysis_data %>% 
+  # Restrict to a single patient
+  filter(subject_id == indiv_name) %>% 
+  # Restrict to a subset of markers, if needed
+  filter(marker_id %in% BENCHMARK_MARKERS) %>% 
+  # Restrict to summed MOI below threshold
+  group_by(subject_id, episode_number, marker_id) %>% 
+  mutate(MOI_per_marker = sum(n())) %>% 
+  group_by(subject_id, episode_number) %>% 
+  mutate(MOI_per_episode = max(MOI_per_marker, na.rm = TRUE)) %>% 
+  ungroup() %>% 
+  mutate(marker_id = factor(marker_id, levels = BENCHMARK_MARKERS))
+
+# 2- Calculate per-episode and per-participant MOI for PvR3S eligibility
+indiv_MOI <- indiv_haplotype_data %>% 
+  select(subject_id, episode_number, 
+         marker_id, starts_with("MOI_")) %>% 
+  distinct() %>% 
+  group_by(subject_id, episode_number) %>% 
+  # Get highest per-marker MOI only for each episode
+  # (drop marker_id in case of ties with highest per-marker MOI)
+  select(-marker_id) %>% 
+  distinct() %>% 
+  filter(MOI_per_marker == max(MOI_per_marker, na.rm = TRUE)) %>% 
+  ungroup() %>% 
+  mutate(MOI_summed = sum(MOI_per_episode, na.rm = TRUE))
+```
+
+Prepare test data
+```{r}
+# Finish data preparation
+  indiv_haplotype_data <- indiv_haplotype_data %>% 
+    group_by(episode_number) %>% 
+    group_split() %>% 
+    lapply(function(x) {
+      res <- x %>% 
+        select(sample_id, episode_number, 
+               marker_id, haplotype, frequency) %>% 
+        # For sensitivity analysis, allow to include/drop allele 
+        # based on their within-individual frequency
+        filter(frequency >= WITHIN_INDIVIDUAL_ALLELE_FREQ_THR) %>% 
+        select(-sample_id, -episode_number, -frequency) %>% 
+        distinct() %>% 
+        # Prevent dropping of markers that are not characterised 
+        # by setting .drop to FALSE
+        group_by(marker_id, .drop = FALSE) %>% 
+        group_split() %>% 
+        lapply(function(y) {
+          unique(y$haplotype)
+        })
+      
+      # Returned a list named with each episode, 
+      # setting marker allele to NA in case none are observed
+      return(lapply(setNames(res, BENCHMARK_MARKERS), 
+                    function(y) {
+                      if (length(y) == 0) return(NA) else return(y)
+                    }))
+    })
+```
+
+```{r run compute posterior one indiv}
+# Run Aimee's posterior estimation
+indiv_posterior <- Pv3Rs::compute_posterior(y  = indiv_haplotype_data, 
+                                            fs = baseline_fs[BENCHMARK_MARKERS])
+
+indiv_posterior
+```
+
+The joint posterior probability of relapse is 99.7%, when we look at the genetic data, this is in line with the inferred probability of relpase. 
+```{r plot haps}
+sols_recurrent %>% 
+  filter(info == "AR-067") %>% 
+  ggplot(aes(x = haplotype, y = factor(info_d), fill = factor(haplotype))) +
+  geom_tile() +
+    facet_grid(~marker_id, scales = "free_x") +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+```
+### Run Pv3Rs one random individual
+```{r subset haplotype data at random}
+# This has been modified from Thomas/Jason script 
+
+## Pick an individual at random to run Pv3Rs
+indiv_name <- sample(unique(analysis_data$subject_id), size = 1)
+
+## Prepare the data
+# 1- Subset haplotype data to specific individual and apply filters
+indiv_haplotype_data <- analysis_data %>% 
+  # Restrict to a single patient
+  filter(subject_id == indiv_name) %>% 
+  # Restrict to a subset of markers, if needed
+  filter(marker_id %in% BENCHMARK_MARKERS) %>% 
+  # Restrict to summed MOI below threshold
+  group_by(subject_id, episode_number, marker_id) %>% 
+  mutate(MOI_per_marker = sum(n())) %>% 
+  group_by(subject_id, episode_number) %>% 
+  mutate(MOI_per_episode = max(MOI_per_marker, na.rm = TRUE)) %>% 
+  ungroup() %>% 
+  mutate(marker_id = factor(marker_id, levels = BENCHMARK_MARKERS))
+
+# 2- Calculate per-episode and per-participant MOI for PvR3S eligibility
+indiv_MOI <- indiv_haplotype_data %>% 
+  select(subject_id, episode_number, 
+         marker_id, starts_with("MOI_")) %>% 
+  distinct() %>% 
+  group_by(subject_id, episode_number) %>% 
+  # Get highest per-marker MOI only for each episode
+  # (drop marker_id in case of ties with highest per-marker MOI)
+  select(-marker_id) %>% 
+  distinct() %>% 
+  filter(MOI_per_marker == max(MOI_per_marker, na.rm = TRUE)) %>% 
+  ungroup() %>% 
+  mutate(MOI_summed = sum(MOI_per_episode, na.rm = TRUE))
+```
+
+
+Now that the data has been subset, Pv3Rs::compute_posterior() will be called (only if the participant meets eligibility criteria as defined by the global variables set earlier in this report).
+```{r run Pv3Rs one random indiv, eval=F}
+if (RUN_EXAMPLE & unique(indiv_MOI$MOI_summed) <= MAX_MOI_TO_INCLUDE) {
+  # Verbose
+  cat("Running Pv3Rs for: ", 
+      indiv_name, 
+      " (summed MOI = ", 
+      unique(indiv_MOI$MOI_summed), 
+      ").\n", 
+      sep = "")
+  
+  # Finish data preparation
+  indiv_haplotype_data <- indiv_haplotype_data %>% 
+    group_by(episode_number) %>% 
+    group_split() %>% 
+    lapply(function(x) {
+      res <- x %>% 
+        select(sample_id, episode_number, 
+               marker_id, haplotype, frequency) %>% 
+        # For sensitivity analysis, allow to include/drop allele 
+        # based on their within-individual frequency
+        filter(frequency >= WITHIN_INDIVIDUAL_ALLELE_FREQ_THR) %>% 
+        select(-sample_id, -episode_number, -frequency) %>% 
+        distinct() %>% 
+        # Prevent dropping of markers that are not characterised 
+        # by setting .drop to FALSE
+        group_by(marker_id, .drop = FALSE) %>% 
+        group_split() %>% 
+        lapply(function(y) {
+          unique(y$haplotype)
+        })
+      
+      # Returned a list named with each episode, 
+      # setting marker allele to NA in case none are observed
+      return(lapply(setNames(res, BENCHMARK_MARKERS), 
+                    function(y) {
+                      if (length(y) == 0) return(NA) else return(y)
+                    }))
+    })
+  
+  # Run Aimee's posterior estimation
+  indiv_posterior <- Pv3Rs::compute_posterior(y  = indiv_haplotype_data, 
+                                              fs = baseline_fs[BENCHMARK_MARKERS])
+} else {
+  # Verbose
+  cat("NOT Running Pv3Rs for: ", 
+      indiv_name, 
+      " because either summed MOI exceeds threshold (observed = ", 
+      unique(indiv_MOI$MOI_summed), 
+      ", MAX_MOI_TO_INCLUDE = ", 
+      MAX_MOI_TO_INCLUDE, 
+      "), or RUN_EXAMPLE was set to FALSE.\n", 
+      sep = "")
+  
+  # Return NULL
+  indiv_posterior <- NULL
+}
+
+indiv_posterior
+```
+
+```{r plot haps for indiv, eval=F}
+sols_recurrent %>% 
+  filter(info == indiv_name) %>% 
+  ggplot(aes(x = haplotype, y = factor(info_d), fill = factor(haplotype))) +
+  geom_tile() +
+    facet_grid(~marker_id, scales = "free_x") +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+```
+### Run for all participants
+```{r run pv3rs all}
+# Start timer
+t_start <- Sys.time()
+
+# Initialize an empty list to store the results
+indiv_posteriors <- list()
+
+# Loop through each unique individual name
+for (indiv_name in unique(analysis_data$subject_id)) {
+  # Verbose
+  cat("ID : ", indiv_name, "...\n", sep = "")
+  
+  ## Prepare the data
+  # 1- Subset haplotype data to specific individual and apply filters
+  indiv_haplotype_data <- analysis_data %>% 
+    # Restrict to a single patient
+    filter(subject_id == indiv_name) %>% 
+    # Ensure episodes are in order
+    arrange(episode_number) %>%  
+    # Restrict to a subset of markers
+    filter(marker_id %in% BENCHMARK_MARKERS) %>% 
+    # Restrict to summed MOI below threshold
+    group_by(subject_id, episode_number, marker_id) %>% 
+    mutate(MOI_per_marker = sum(n())) %>% 
+    group_by(subject_id, episode_number) %>% 
+    mutate(MOI_per_episode = max(MOI_per_marker, na.rm = TRUE)) %>% 
+    ungroup() %>% 
+    mutate(marker_id = factor(marker_id, levels = BENCHMARK_MARKERS))
+  
+  # 2- Calculate per-episode and per-participant MOI for PvR3S eligibility
+  indiv_MOI <- indiv_haplotype_data %>% 
+    select(subject_id, episode_number, 
+           marker_id, starts_with("MOI_")) %>% 
+    distinct() %>% 
+    group_by(subject_id, episode_number) %>% 
+    # Get highest per-marker MOI only for each episode
+    # (drop marker_id in case of ties with highest per-marker MOI)
+    select(-marker_id) %>% 
+    distinct() %>% 
+    filter(MOI_per_marker == max(MOI_per_marker, na.rm = TRUE)) %>% 
+    ungroup() %>% 
+    mutate(MOI_summed = sum(MOI_per_episode, na.rm = TRUE))
+  
+  ## Run Pv3Rs only if MOI below threshold         
+  if (unique(indiv_MOI$MOI_summed) <= MAX_MOI_TO_INCLUDE) {
+    # Verbose
+    cat("Running Pv3Rs for: ", 
+        indiv_name, 
+        " (summed MOI = ", 
+        unique(indiv_MOI$MOI_summed), 
+        ").\n", 
+        sep = "")
+    
+    # Preserve episode numbers for naming the output list
+    indiv_episode <- unique(indiv_haplotype_data$episode_number)
+    cat("The episode number is: ", indiv_episode) # printing to check episode order number is correct
+    
+    # Finish data preparation
+    indiv_haplotype_data <- indiv_haplotype_data %>% 
+      group_by(episode_number) %>% 
+      group_split() %>% 
+      lapply(function(x) {
+        res <- x %>% 
+          select(sample_id, episode_number, 
+                 marker_id, haplotype, frequency) %>% 
+          # For sensitivity analysis, allow to include/drop allele 
+          # based on their within-individual frequency
+          filter(frequency >= WITHIN_INDIVIDUAL_ALLELE_FREQ_THR) %>% 
+          select(-sample_id, -episode_number, -frequency) %>% 
+          distinct() %>% 
+          # Prevent dropping of markers that are not characterized 
+          # by setting .drop to FALSE
+          group_by(marker_id, .drop = FALSE) %>% 
+          group_split() %>% 
+          lapply(function(y) {
+            unique(y$haplotype)
+          })
+        
+        # Returned a list named with each episode, 
+        # setting marker allele to NA in case none are observed
+        return(lapply(setNames(res, BENCHMARK_MARKERS), 
+                      function(y) {
+                        if (length(y) == 0) return(NA) else return(y)
+                      }))
+      })
+    
+    # Run Aimee's posterior estimation
+    indiv_posterior <- compute_posterior(y     = indiv_haplotype_data,
+                                         fs    = baseline_fs[BENCHMARK_MARKERS], 
+                                         prior = matrix(PRIOR_3RS, 
+                                                        nrow     = length(indiv_haplotype_data), 
+                                                        ncol     = length(PRIOR_3RS), 
+                                                        byrow    = TRUE, 
+                                                        dimnames = list(c(1:length(indiv_haplotype_data)), 
+                                                                        names(PRIOR_3RS))))
+    
+  } else {
+    # Verbose
+    cat("NOT Running Pv3Rs for: ", 
+        indiv_name, 
+        " because summed MOI exceeds threshold (observed = ", 
+        unique(indiv_MOI$MOI_summed), 
+        ", MAX_MOI_TO_INCLUDE = ", 
+        MAX_MOI_TO_INCLUDE, 
+        ").\n", 
+        sep = "")
+    
+    # Return NULL
+    indiv_episode    <- unique(indiv_haplotype_data$episode_number)
+    indiv_posterior <- NULL
+  }
+  
+  # Append the results to the list
+  indiv_posteriors[[indiv_name]] <- list("subject_id" = indiv_name, 
+                                         "episode_number"       = indiv_episode, 
+                                         "Pv3Rs"       = indiv_posterior)
+}
+
+# End timer
+t_end <- Sys.time()
+cat("Pv3Rs for the whole dataset took : ", as.numeric(difftime(time1 = t_end, 
+                                                               time2 = t_start, 
+                                                               units = "secs"))/60, " mins", "\n", sep = "")
+
+# Present the marginal data in a clearer format
+indiv_posteriors_marginal <- do.call(rbind, 
+                                     lapply(indiv_posteriors, function(x) {
+                                       if (!is.null(x[["Pv3Rs"]])) {
+                                         return(data.frame("subject_id"               = x[["subject_id"]], 
+                                                           "episode_number"                     = x[["episode_number"]][-1], 
+                                                           "Posterior_marginal_prob_C" = x[["Pv3Rs"]]$marg[, "C"], 
+                                                           "Posterior_marginal_prob_L" = x[["Pv3Rs"]]$marg[, "L"], 
+                                                           "Posterior_marginal_prob_I" = x[["Pv3Rs"]]$marg[, "I"]))
+                                       } else {
+                                         return(NULL)
+                                       }
+                                       
+                                     }))
+row.names(indiv_posteriors_marginal) <- 1:nrow(indiv_posteriors_marginal)
+
+# Present the joint posterior estimates in a clearer format
+indiv_posteriors_joint <- do.call(rbind, 
+                                  lapply(indiv_posteriors, function(x) {
+                                    if (!is.null(x[["Pv3Rs"]])) {
+                                      joint_probs <- x[["Pv3Rs"]]$joint
+                                      # Extract the state pairs and probabilities
+                                      state_pairs <- names(joint_probs)
+                                      prob_values <- as.numeric(joint_probs)
+                                      
+                                      # Create a data frame with subject_id, episode_number, and joint probabilities
+                                      return(data.frame("subject_id"      = rep(x[["subject_id"]], length(state_pairs)), 
+                                                        "episode_number"  = rep(x[["episode_number"]][-1], each = length(state_pairs)),
+                                                        "state_pair"      = state_pairs, 
+                                                        "joint_probability" = prob_values))
+                                    } else {
+                                      return(NULL)
+                                    }
+                                  }))
+row.names(indiv_posteriors_joint) <- 1:nrow(indiv_posteriors_joint)
+
+# Save Pv3Rs output because it's time consuming and 
+# we don't want to re-run it every time.
+save(list = c("RUN_EXAMPLE", "WITHIN_INDIVIDUAL_ALLELE_FREQ_THR", "BENCHMARK_MARKERS", "MAX_MOI_TO_INCLUDE", "PRIOR_3RS", 
+              "analysis_data", "baseline_fs", 
+              "indiv_posteriors", "indiv_posteriors_marginal", "indiv_posteriors_joint"), 
+     file = paste0("./outputs/Pv3Rs_sols_posteriors_", 
+                   strftime(Sys.time(), format = "%Y%m%d_%H%M%S"), 
+                   ".RData"))
+```
+
+### Explore the posterior
+The marginal probabilities give us the probability of the three states for each recurrent episode. However, this does not consider the joint probability of different states when a person experienced more than one recurrent episode. 
+```{r marginal probs}
+indiv_posteriors_marginal
+```
+
+The joint probabilites give us values for each possible combination of states, depending on the number of recurrent episodes experienced by the participant. 
+```{r joint probs}
+joint_summary <- indiv_posteriors_joint %>% 
+                    group_by(subject_id, state_pair, joint_probability) %>% 
+                    filter(episode_number == max(episode_number)) %>% 
+                    mutate(percentage = round(joint_probability*100, 3),
+                           total_recurrences = episode_number-1) %>%
+                    select(-episode_number) %>% 
+                    arrange(subject_id, total_recurrences, percentage) %>% 
+                    relocate(total_recurrences, .before = state_pair)
+
+joint_summary
+```
+
+## Plot marginal probabilities 
+```{r marg probs}
+marginal_summary <- indiv_posteriors_marginal %>% 
+  pivot_longer(cols = !subject_id & !episode_number, 
+               names_to = "posterior_type", 
+               values_to = "posterior_value") %>% 
+  mutate(posterior_classification = case_when(posterior_type == "Posterior_marginal_prob_C" ~ "Recrudescence",
+                                              posterior_type == "Posterior_marginal_prob_L" ~ "Relapse",
+                                              posterior_type == "Posterior_marginal_prob_I" ~ "Reinfection"),
+         posterior_classification = factor(posterior_classification, 
+                                           levels = c("Relapse", "Recrudescence", "Reinfection"))) %>% 
+  select(-posterior_type)
+
+marginal_summary
+```
+
+### By episode number
+```{r plot probabilities, fig.height=8, fig.width=8}
+marginal_summary %>% 
+  group_by(subject_id) %>%
+  arrange(desc(posterior_value), .by_group = TRUE) %>%
+  mutate(subject_id = factor(subject_id, levels = unique(subject_id[order(posterior_value, decreasing = TRUE)]))) %>%
+  
+  ggplot(aes(x = factor(episode_number), y = posterior_value, group = episode_number, fill = posterior_classification)) + 
+    geom_bar(stat = "identity", position = "fill") +
+    scale_fill_manual(values = c("Relapse" = "turquoise3",
+                                 "Recrudescence" = "skyblue4",
+                                 "Reinfection" = "magenta3")) +
+    scale_x_discrete(expand = c(0, 0)) +
+    scale_y_continuous(expand = c(0, 0)) +
+    labs(x     = "Episode number", 
+         y     = "Posterior probability", 
+         fill = "") + 
+    theme_bw() +
+    facet_wrap(~subject_id)
+```
+
+### By treatment arm
+```{r plot probabilites by treatment arm, fig.height=8, fig.width=8}
+marginal_summary %>% 
+  left_join(analysis_data %>% select(subject_id, treatment_arm) %>% distinct(), 
+            by = "subject_id") %>% 
+  group_by(subject_id) %>% 
+  arrange(desc(posterior_value), .by_group = TRUE) %>% 
+  mutate(subject_id = factor(subject_id, levels = unique(subject_id[order(posterior_value, decreasing = TRUE)]))) %>% 
+  ggplot(aes(x = factor(episode_number), y = posterior_value, group = episode_number, fill = posterior_classification)) + 
+    geom_bar(stat = "identity", position = "fill") +
+    scale_fill_manual(values = c("Relapse" = "turquoise3",
+                                 "Recrudescence" = "skyblue4",
+                                 "Reinfection" = "magenta3")) +
+  
+    scale_x_discrete(expand = c(0, 0)) +
+    scale_y_continuous(expand = c(0, 0)) +
+    labs(x     = "Episode number", 
+         y     = "Posterior probability", 
+         fill = "") + 
+    theme_bw() +
+    facet_wrap(treatment_arm ~ subject_id)
+```
+
+### By days since last episode 
+```{r plot posterior probabilities with time, fig.height=8, fig.width=8}
+marginal_summary %>% 
+  left_join(analysis_data %>% select(subject_id, episode_number, treatment_arm, visit_date, days_since_enrolment, days_since_last_episode) %>% distinct(), 
+            by = c("subject_id", "episode_number")) %>% 
+  group_by(subject_id) %>%
+  arrange(desc(posterior_value), .by_group = TRUE) %>%
+  mutate(subject_id = factor(subject_id, levels = unique(subject_id[order(posterior_value, decreasing = TRUE)]))) %>%
+  ggplot(aes(x = days_since_enrolment, y = posterior_value, group = episode_number, fill = posterior_classification)) + 
+  geom_bar(stat = "identity", position = "fill", width = 3) +
+    scale_fill_manual(values = c("Relapse" = "turquoise3",
+                                 "Recrudescence" = "skyblue4",
+                                 "Reinfection" = "magenta3")) +
+  
+    scale_x_continuous(expand = c(0, 0)) +
+    scale_y_continuous(expand = c(0, 0)) +
+  labs(x     = "Days since enrolment", 
+       y     = "Posterior probability", 
+       fill = "") + 
+  theme_bw() +
+  facet_wrap(~subject_id)
+```
+
+## Plot joint probabilities
+```{r color palettes}
+pal1 <- c(
+  "C" = "turquoise3", 
+  "I" = "magenta3", 
+  "L" = "skyblue4")
+
+pal2 <- c(
+  "II" = "magenta3",
+  "IL" = "darkorange2",
+  "LI" = "goldenrod2",
+  "LL" = "skyblue4",
+  "CI" = "saddlebrown",
+  "CL" = "turquoise4",
+  "IC" = "darkolivegreen",
+  "LC" = "lightseagreen"
+)
+
+pal3 <- c(
+  "IIL" = "darkorange3",
+  "ILL" = "orangered3",
+  "LIL" = "goldenrod3",
+  "LLL" = "skyblue4",
+  "CCI" = "sienna4",
+  "CCL" = "cadetblue3",
+  "CLI" = "darkcyan",
+  "CLL" = "steelblue3",
+  "LCI" = "peru",
+  "LCL" = "powderblue",
+  "LLI" = "orange3"
+)
+
+pal4 <- c(
+  "ICCI" = "saddlebrown",
+  "ICCL" = "darkseagreen",
+  "ICLI" = "orange3",
+  "ICLL" = "lightsteelblue",
+  "ILCI" = "darkkhaki",
+  "ILCL" = "skyblue3",
+  "ILLI" = "gold3",
+  "LCCI" = "rosybrown",
+  "LCCL" = "lightblue3",
+  "LCLI" = "goldenrod3",
+  "LCLL" = "deepskyblue3",
+  "LLCI" = "tan",
+  "LLCL" = "mediumturquoise",
+  "LLLI" = "darkorange3"
+)
+
+combined_pal <- c(pal1, pal2, pal3, pal4)
+```
+
+```{r plotting joint fxn}
+plotJointProb <- function(data, recurrence_n, prob_threshold, color_palette, ...){
+  data %>% 
+    filter(total_recurrences == recurrence_n, joint_probability > prob_threshold) %>% 
+    group_by(subject_id) %>% 
+    mutate(state_pair = fct_reorder(state_pair, joint_probability)) %>%
+    ungroup() %>% 
+    ggplot(aes(x = joint_probability, 
+               y = subject_id, 
+               fill = state_pair)) +
+      geom_bar(position = "stack", stat = "identity") +
+      scale_x_continuous(expand = c(0, 0)) +
+      scale_y_discrete(expand = c(0, 0)) +
+      scale_fill_manual(values = color_palette) +
+      labs(x = "Joint probability estimate",
+           y = "Participant",
+           fill = "Classification state") +
+      theme_bw() + 
+    facet_wrap(~total_recurrences, scales = "free_y")
+}
+```
+
+### By total number of recurrences
+```{r plot joint by recurrences, fig.height = 7, fig.width = 12}
+plot_joint1 <- plotJointProb(joint_summary, 1, 0, pal1) 
+plot_joint2 <- plotJointProb(joint_summary, 2, 0, pal2) + guides(fill = guide_legend(ncol = 2)) 
+plot_joint3 <- plotJointProb(joint_summary, 3, 0.001, pal3) + guides(fill = guide_legend(ncol = 3)) 
+plot_joint4 <- plotJointProb(joint_summary, 4, 0.001, pal4) + guides(fill = guide_legend(ncol = 3)) 
+
+(plot_joint1 | plot_joint2) / (plot_joint3 | plot_joint4) +
+  plot_annotation(subtitle = "I = Reinfection, L = Relapse, C = Recrudescence",
+                  caption = expression(italic("For >2 recurrences, only probability estimates > 0.001 are shown"))) +
+  plot_layout(heights = c(2, 1))
+```
+
+### By treatment arm and number of recurrences
+```{r plot joint by treatment arm, fig.height = 8, fig.width = 12}
+joint_summary %>% 
+    left_join(analysis_data %>% select(subject_id, treatment_arm) %>% distinct(),
+              by = "subject_id") %>% 
+    filter(joint_probability > 0.001) %>% 
+    group_by(subject_id) %>% 
+    mutate(state_pair = fct_reorder(state_pair, joint_probability)) %>%
+    ungroup() %>% 
+    ggplot(aes(x = joint_probability, 
+               y = reorder(subject_id, total_recurrences), 
+               fill = state_pair)) +
+      geom_bar(position = "stack", stat = "identity") +
+      scale_x_continuous(expand = c(0, 0)) +
+      scale_y_discrete(expand = c(0, 0)) +
+      scale_fill_manual(values = combined_pal) +
+      labs(x = "Joint probability estimate",
+           y = "Participant",
+           fill = "Classification state",
+           subtitle = "I = Reinfection, L = Relapse, C = Recrudescence",
+           caption = expression(italic("Color coding: if > 1 recurrence, blue shades denote combinations of relapse and recrudescence (L and C), shades of orange/browns denote \ncombos of reinfection and relapse (I and L) and green shades denote combos of reinfection with recrudescence (I and C)"))) +
+      theme_bw() + 
+      facet_wrap(treatment_arm~total_recurrences, scales = "free") +
+      # facet_wrap(total_recurrences~treatment_arm, scales = "free") +
+      theme(plot.caption = element_text(hjust = 0, vjust = -2)) 
+```
+
+### 'Confidence' in highest joint probability estimate
+What is the joint probability estimate for the 'highest ranking' state pair classification? I.e. if >80% relatively high confidence? n=19
+```{r plot joint probability confidence}
+joint_summary %>% 
+  filter(joint_probability > 0.001) %>% 
+  group_by(subject_id) %>% 
+  # get the highest prob for each subj and store ranking
+  mutate(ranking = rank(-joint_probability, ties.method = "first")) %>% 
+  arrange(subject_id, ranking) %>% 
+  filter(ranking == 1) %>% 
+  ggplot(aes(x = reorder(subject_id, -joint_probability),
+             y = joint_probability,
+             fill = factor(total_recurrences))) +
+    geom_col() +
+    geom_hline(yintercept = 0.8, color = "darkgray", linetype = "dashed") +
+    labs(x = "Participant",
+         y = "Joint probability estimate for highest 'ranking' state pair",
+         fill = "Number of recurrent episodes",
+         caption = expression(italic("Dashed line indicates an arbitrary threshold of 80%"))) +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+```
+
+How many state pairs make up the arbitrary 80% threshold?
+```{r plot joint prob for pair rankings, fig.height=6, fig.width=9}
+joint_summary %>% 
+  filter(joint_probability > 0.001) %>% 
+  group_by(subject_id) %>% 
+  # Get the highest prob for each subject and store ranking
+  mutate(ranking = rank(-joint_probability, ties.method = "first")) %>% 
+  # reverse ranking order of ranking so we plot the highest rank at the bottom
+  arrange(subject_id, desc(ranking)) %>%
+  mutate(ranking = factor(ranking, levels = unique(ranking))) %>% 
+  ggplot(aes(x = subject_id,
+             y = joint_probability,
+             fill = ranking)) +
+    geom_bar(stat = "identity", position = "stack") +
+    geom_hline(yintercept = 0.8, color = "darkgray", linetype = "dashed") +
+    scale_fill_manual(values = colorRampPalette(brewer.pal(12, "Paired"))(14),
+                      guide = guide_legend(reverse = T)) +
+    scale_x_discrete(expand = c(0, 0)) +
+    scale_y_continuous(expand = c(0, 0)) +
+    labs(x = "Participant",
+         y = "Joint probability estimate for state pair",
+         fill = "Number of possible \nestimated state pairs",
+         caption = expression(italic("Dashed line indicates an arbitrary threshold of 80%"))) +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) +
+    facet_wrap(~total_recurrences, scales = "free_x")
+```
+
+### Highest ranking classification by episode number
+```{r create summary of top 3 rankings}
+joint_top3_summary <- joint_summary %>% 
+            select(-percentage) %>% 
+            group_by(subject_id) %>% 
+            # Get the highest prob for each subject and store ranking
+            mutate(ranking = rank(-joint_probability, ties.method = "first")) %>% 
+            arrange(subject_id, ranking) %>% 
+            filter(ranking %in% c(1, 2, 3))
+```
+
+We will keep the 'highest ranking' joint probability estimate so we can compare the state classification for each episode with other metrics
+```{r create summary of top ranking joint probability for each recurrence}
+joint_recurrence_summary <- joint_top3_summary %>% 
+  select(-total_recurrences) %>% 
+  filter(ranking == 1) %>% 
+  mutate(state_pair_split = strsplit(state_pair, "")) %>%  # Split state_pair into individual letters
+  unnest(state_pair_split) %>%  # Unnest to create a new row for each letter
+  group_by(subject_id) %>%
+  mutate(
+    episode_number = row_number() + 1,  # Create episode number starting from n+1 to reflect number of recurrence
+    joint_probability = joint_probability,  # Keep the same joint_probability for all episodes\
+    state_classification = case_when(state_pair_split == "L" ~ "Relapse",
+                                     state_pair_split == "C" ~ "Recrudescence",
+                                     state_pair_split == "I" ~ "Reinfection")) %>%
+  select(subject_id, episode_number, state_classification, joint_probability)
+```
+
+```{r plot joint prob highest ranking by episode, fig.height=6, fig.width=8}
+joint_recurrence_summary %>% 
+  ggplot(aes(x = factor(episode_number), y = joint_probability, fill = state_classification)) +
+    geom_col() +
+    scale_fill_manual(values = c("Relapse" = "turquoise3",
+                                 "Recrudescence" = "skyblue4",
+                                 "Reinfection" = "magenta3")) +
+    scale_x_discrete(expand = c(0, 0)) +
+    scale_y_continuous(expand = c(0, 0)) +
+    labs(x     = "Episode number", 
+         y     = "Posterior joint probability", 
+         fill = "") + 
+    theme_bw() +
+    facet_wrap(~subject_id)
+```
+
+## Comparison marginal vs joint 
+```{r create posterior summary}
+posterior_summary <- marginal_summary %>% 
+  rename("marginal_posterior_probability" = "posterior_value",
+         "marginal_classification" = "posterior_classification") %>% 
+  left_join(joint_recurrence_summary %>% 
+               rename("joint_classification" = "state_classification",
+                      "joint_posterior_probability" = "joint_probability"),
+             by = c("subject_id", "episode_number")) %>% 
+  pivot_longer(cols = c(marginal_posterior_probability, 
+                        joint_posterior_probability, 
+                        marginal_classification, 
+                        joint_classification),
+    names_to = c("estimate_type", ".value"),
+    names_pattern = "(marginal|joint)_(posterior_probability|classification)") %>% 
+  distinct() 
+```
+
+```{r plot marginal with joint probs, fig.height = 6, fig.width=8}
+posterior_summary %>% 
+  group_by(subject_id, episode_number) %>%
+  arrange(desc(posterior_probability), .by_group = TRUE) %>%
+  mutate(classification = factor(classification, levels = unique(classification))) %>%
+  ungroup() %>% 
+  ggplot(aes(x = factor(episode_number), y = posterior_probability, group = episode_number)) + 
+    geom_bar(data = . %>% filter(estimate_type == "marginal"),
+             aes(fill = classification),
+             stat = "identity", 
+             position = "fill") +
+    geom_segment(data = . %>% filter(estimate_type == "joint"),
+               aes(x = as.numeric(factor(episode_number)) - 0.4,  
+                   xend = as.numeric(factor(episode_number)) + 0.4,  
+                   y = posterior_probability,  
+                   yend = posterior_probability, 
+                   color = classification),
+               size = 1.5) +
+    geom_point(data = . %>% filter(estimate_type == "joint"),
+               aes(color = classification,
+                   fill = classification),
+               shape = 21) +
+    scale_fill_manual(values = c("Relapse" = "turquoise3",
+                                 "Recrudescence" = "skyblue4",
+                                 "Reinfection" = "magenta3")) +
+    scale_color_manual(values = c("Relapse" = "#006064",
+                                 "Recrudescence" = "#3B4F75",
+                                 "Reinfection" = "#8B008B")) +
+    scale_x_discrete(expand = c(0, 0)) +
+    scale_y_continuous(expand = c(0, 0)) +
+    labs(x     = "Episode number", 
+         y     = "Posterior probability", 
+         fill = "Marginal classification",
+         color = "Joint probability estimate \n and classification") + 
+    theme_bw() +
+    facet_wrap(~subject_id)
+```
+
+## Comparison to IBS and IBD estimates
+```{r read pnh data}
+sols_pnh <- read.csv(here("data/final", "sols_PNH_data.csv"))
+ibd_r_data <- readRDS(here("data/final", "sols_all_meta.rds"))
+ibd_rhat_data <- readRDS(here("data/final", "sols_sig_meta.rds"))
+```
+
+For direct comparison with the we can only look at the paired comparisons between baseline samples and follow-up samples, but not other pw comparisons for a given participant. 
+```{r filter datasets}
+sols_ibd <- ibd_r_data %>% 
+              # filter to include only paired samples, and only pw comparisons to baseline
+              filter(comparison_type == "paired", day_id2 == 0) %>% 
+              mutate(subject_id = paste0("AR-", patientid1),
+                     day_id1 = as.integer(day_id1),
+                     day_id2 = as.integer(day_id2)) %>% 
+              group_by(subject_id) %>%  
+              arrange(day_id1) %>%  
+              # create episode_number accounting for baseline as episode 1
+              mutate(episode_number = row_number() + 1) %>% 
+              ungroup()
+```
+
+```{r create classification summary}
+classification_summary <- indiv_posteriors_marginal %>% 
+  rename("posterior_probability_recrudescence" = "Posterior_marginal_prob_C",
+         "posterior_probability_relapse" = "Posterior_marginal_prob_L",
+         "posterior_probability_reinfection" = "Posterior_marginal_prob_I") %>% 
+  # merge with epi variables
+  left_join(analysis_data %>% select(subject_id, sample_id, episode_number, treatment_arm, visit_date, days_since_enrolment, days_since_last_episode) %>% distinct(), 
+            by = c("subject_id", "episode_number")) %>% 
+  # merge with PNH data
+  left_join(sols_pnh, by = c("subject_id" = "Patient", "episode_number" = "recurrence")) %>% 
+  rename("prop_same_haps_1minusPNH" = "Prop_het", 
+         "pnh_range" = "identity", 
+         "classification" = "Classification") %>% 
+  # create bins for 1-PNH (IBS metric)
+  mutate(ibs_range = cut(prop_same_haps_1minusPNH,  
+                         breaks = c(0, 0.25, 0.5, 0.75, 1), 
+                         include.lowest = TRUE, 
+                         labels = c("0-0.25", "0.25-0.5", "0.5-0.75", "0.75-1"))) %>% 
+  # merge with IBD r
+  left_join(sols_ibd,
+            by = c("subject_id", "episode_number")) %>% 
+  # create bins for IBD r
+  mutate(ibd_range = cut(estimate,  
+                         breaks = c(0, 0.25, 0.5, 0.75, 1), 
+                         include.lowest = TRUE, 
+                         labels = c("0-0.25", "0.25-0.5", "0.5-0.75", "0.75-1"))) %>% 
+  # merge with joint probabilities
+  left_join(joint_recurrence_summary %>% 
+              rename("joint_classification" = "state_classification"),
+            by = c("subject_id", "episode_number"))
+
+classification_summary
+```
+
+### Comparison with IBS
+```{r classification comparison with IBS, eval=F}
+classification_summary %>% 
+  select(subject_id, sample_id, episode_number, visit_date, days_since_enrolment, days_since_last_episode, starts_with("posterior_"), starts_with("joint"), prop_same_haps_1minusPNH, pnh_range, ibs_range, classification) %>% 
+  pivot_longer(cols = (starts_with("posterior")), 
+               names_to = "posterior_type", 
+               values_to = "posterior_value") %>% 
+  mutate(posterior_range = cut(posterior_value, 
+                               breaks = c(0, 0.25, 0.5, 0.75, 1), 
+                               include.lowest = TRUE, 
+                               labels = c("0-0.25", "0.25-0.5", "0.5-0.75", "0.75-1"))) %>% 
+  count(ibs_range, classification, posterior_type, posterior_range)
+```
+
+### Plot IBS range vs probabilistic classification (marginal probability)
+```{r classification IBS comparison plot v marginal, fig.height=10, fig.width=8}
+classification_summary %>% 
+  select(subject_id, sample_id, pair, episode_number, visit_date, days_since_enrolment, days_since_last_episode, starts_with("posterior_"), prop_same_haps_1minusPNH, pnh_range, ibs_range, classification) %>% 
+  pivot_longer(cols = (starts_with("posterior")), 
+               names_to = "posterior_type", 
+               values_to = "posterior_value") %>% 
+  mutate(posterior_range = cut(posterior_value, 
+                               breaks = c(0, 0.25, 0.5, 0.75, 1), 
+                               include.lowest = TRUE, 
+                               labels = c("0-0.25", "0.25-0.5", "0.5-0.75", "0.75-1"))) %>%  
+  ggplot(aes(x = reorder(pair, episode_number), y = posterior_value, group = episode_number, fill = posterior_type)) +
+    geom_bar(stat = "identity", position = "fill") +
+    scale_fill_manual(values = c("turquoise3", "magenta3", "skyblue4"),
+                       labels = c("posterior_probability_relapse" = "Relapse",
+                                  "posterior_probability_recrudescence" = "Recrudescence",
+                                  "posterior_probability_reinfection" = "Reinfection")) +
+    scale_x_discrete(expand = c(0, 0)) +
+    scale_y_continuous(expand = c(0, 0)) +
+    labs(x     = "Sample pair", 
+         y     = "Posterior marginal probability", 
+         fill = "") + 
+    theme_bw() +
+    facet_wrap(~ibs_range, scales = "free_x") +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+```
+### Plot IBS range vs probabilistic classification (joint probability, highest ranking)
+```{r classification IBS comparison plot v joint, fig.height=10, fig.width=8}
+classification_summary %>% 
+  select(subject_id, sample_id, pair, episode_number, visit_date, days_since_enrolment, days_since_last_episode, starts_with("joint"), prop_same_haps_1minusPNH, pnh_range, ibs_range, classification) %>% 
+  ggplot(aes(x = reorder(pair, episode_number), y = joint_probability, group = episode_number, fill = joint_classification)) +
+    geom_bar(stat = "identity") +
+    scale_fill_manual(values = c("Relapse" = "turquoise3",
+                                 "Recrudescence" = "skyblue4",
+                                 "Reinfection" = "magenta3")) +
+    scale_x_discrete(expand = c(0, 0)) +
+    scale_y_continuous(expand = c(0, 0)) +
+    labs(x     = "Sample pair", 
+         y     = "Posterior joint probability (highest ranking classification)", 
+         fill = "") + 
+    theme_bw() +
+    facet_wrap(~ibs_range, scales = "free_x") +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+```
+
+### Comparison with IBD
+```{r classification comparison with IBD, eval=F}
+classification_summary %>% 
+  select(subject_id, sample_id, episode_number, visit_date, days_since_enrolment, days_since_last_episode, starts_with("posterior_"), ibd_range, CI_lower, CI_upper, sig_est) %>% 
+  pivot_longer(cols = (starts_with("posterior")), 
+               names_to = "posterior_type", 
+               values_to = "posterior_value") %>% 
+  mutate(posterior_range = cut(posterior_value, 
+                               breaks = c(0, 0.25, 0.5, 0.75, 1), 
+                               include.lowest = TRUE, 
+                               labels = c("0-0.25", "0.25-0.5", "0.5-0.75", "0.75-1"))) %>% 
+  count(ibd_range, sig_est, posterior_type, posterior_range)
+```
+
+### For reference - all pairwise comparisons
+```{r plot estimates and CI all pw comparisons, fig.height=16, fig.width=10}
+ibd_r_data %>%  
+  filter(comparison_type == "paired") %>% 
+  ggplot(aes(x = pair, y = estimate, group = patientid1, color = sig_est)) +
+    geom_point(size = 3) +
+    geom_errorbar(aes(ymin = CI_lower, ymax = CI_upper)) +
+    scale_color_manual(values = c("not significant" = "darkgrey", 
+                                  "significant" = "indianred3")) +
+    facet_wrap(~patientid1, scales = "free_x") +
+    theme_bw() +    
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+```
+
+### Plot IBD estimate and CI for paired samples compared to baseline for each participant
+```{r plot estimates and CI paired samples, fig.height=12, fig.width=8}
+classification_summary %>% 
+  ggplot(aes(x = reorder(sampleid1, days_since_enrolment), y = estimate, group = subject_id, color = sig_est)) +
+    geom_point(size = 3) +
+    geom_errorbar(aes(ymin = CI_lower, ymax = CI_upper)) +
+    scale_color_manual(values = c("not significant" = "darkgrey", 
+                                  "significant" = "indianred3")) +
+    labs(x = "Sample",
+         y = "IBD",
+         fill = "Significance") +
+    facet_wrap(~subject_id, scales = "free_x") +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+```
+
+```{r plot estimates and CI not paired samples, eval=F}
+ibd_r_data %>% 
+  filter(comparison_type == "not paired") %>% 
+  ggplot(aes(x = pair, y = estimate, group = patientid1, color = sig_est)) +
+    geom_point(size = 3) +
+    geom_errorbar(aes(ymin = CI_lower, ymax = CI_upper)) +
+    scale_color_manual(values = c("not significant" = "darkgrey", 
+                                  "significant" = "indianred3")) +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+```
+
+### Plot IBD estimate and CI for paired samples compared to baseline for each participant, based on days since enrolment
+```{r plot estimates and CI paired samples v days, fig.height=12, fig.width=8}
+classification_summary %>% 
+  ggplot(aes(x = days_since_enrolment, y = estimate, group = subject_id, color = sig_est)) +
+    geom_point(size = 3) +
+    geom_errorbar(aes(ymin = CI_lower, ymax = CI_upper)) +
+    scale_color_manual(values = c("not significant" = "darkgrey", 
+                                  "significant" = "indianred3")) +
+    labs(x = "Days since last episode",
+         y = "IBD",
+         fill = "Significance") +
+    facet_wrap(~subject_id, scales = "free_x") +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+```
+
+### Plot IBD range vs probabilistic classification (marginal)
+```{r classification IBD comparison plot, fig.height=10, fig.width=8}
+classification_summary %>% 
+  select(subject_id, sample_id, pair, episode_number, visit_date, days_since_enrolment, days_since_last_episode, starts_with("posterior_"), ibd_range, CI_lower, CI_upper, sig_est) %>% 
+  pivot_longer(cols = (starts_with("posterior")), 
+               names_to = "posterior_type", 
+               values_to = "posterior_value") %>% 
+  mutate(posterior_range = cut(posterior_value, 
+                               breaks = c(0, 0.25, 0.5, 0.75, 1), 
+                               include.lowest = TRUE, 
+                               labels = c("0-0.25", "0.25-0.5", "0.5-0.75", "0.75-1"))) %>%  
+  ggplot(aes(x = reorder(pair, episode_number), y = posterior_value, group = episode_number, fill = posterior_type)) +
+    geom_bar(stat = "identity", position = "fill") +
+    scale_fill_manual(values = c("turquoise3", "magenta3", "skyblue4"),
+                       labels = c("posterior_probability_relapse" = "Relapse",
+                                  "posterior_probability_recrudescence" = "Recrudescence",
+                                  "posterior_probability_reinfection" = "Reinfection")) +
+    scale_x_discrete(expand = c(0, 0)) +
+    scale_y_continuous(expand = c(0, 0)) +
+    labs(x     = "Sample pair", 
+         y     = "Posterior marginal probability", 
+         fill = "") + 
+    theme_bw() +
+    facet_wrap(~ibd_range, scales = "free_x") +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+```
+
+### Plot IBD range vs probabilistic classification (joint probability, highest ranking)
+```{r classification IBD comparison plot v joint, fig.height=10, fig.width=8}
+classification_summary %>% 
+  select(subject_id, sample_id, pair, episode_number, visit_date, days_since_enrolment, days_since_last_episode, starts_with("joint"), ibd_range, CI_lower, CI_upper, sig_est) %>% 
+  ggplot(aes(x = reorder(pair, episode_number), y = joint_probability, group = episode_number, fill = joint_classification)) +
+    geom_bar(stat = "identity") +
+    scale_fill_manual(values = c("Relapse" = "turquoise3",
+                                 "Recrudescence" = "skyblue4",
+                                 "Reinfection" = "magenta3")) +
+    scale_x_discrete(expand = c(0, 0)) +
+    scale_y_continuous(expand = c(0, 0)) +
+    labs(x     = "Sample pair", 
+         y     = "Posterior joint probability (highest ranking classification)", 
+         fill = "") + 
+    theme_bw() +
+    facet_wrap(~ibd_range, scales = "free_x") +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+```
+
+## Confusion matrices: PNH vs probabilistic classification
+
+### Classification by 1-PNH (IBS) range
+```{r data for confusion matrix ibs range}
+confusion_data_ibsrange <- classification_summary %>% 
+  select(subject_id, sample_id, episode_number, visit_date, days_since_enrolment, days_since_last_episode, starts_with("posterior_"), starts_with("joint"), prop_same_haps_1minusPNH, pnh_range, ibs_range, 
+         # renaming for clarity
+         pnh_classification = classification) %>% 
+  pivot_longer(cols = (starts_with("posterior")), 
+               names_to = "marginal_classification", 
+               values_to = "marginal_probability") %>% 
+  mutate(marginal_classification = case_when(marginal_classification == "posterior_probability_recrudescence" ~ "Recrudescence",
+                                             marginal_classification == "posterior_probability_relapse" ~ "Relapse",
+                                             marginal_classification == "posterior_probability_reinfection" ~ "Reinfection"),
+         marginal_classification = factor(marginal_classification, 
+                                          levels = c("Relapse", "Recrudescence", "Reinfection")),
+         marginal_probability_range = cut(marginal_probability, 
+                                          breaks = c(0, 0.25, 0.5, 0.75, 1), 
+                                          include.lowest = TRUE, 
+                                          labels = c("0-0.25", "0.25-0.5", "0.5-0.75", "0.75-1")),
+         joint_probability_range = cut(joint_probability, 
+                                       breaks = c(0, 0.25, 0.5, 0.75, 1), 
+                                       include.lowest = TRUE, 
+                                       labels = c("0-0.25", "0.25-0.5", "0.5-0.75", "0.75-1"))) %>% 
+  select(subject_id, episode_number, days_since_enrolment, ibs_range, pnh_classification,  marginal_classification, marginal_probability, marginal_probability_range, joint_classification, joint_probability, joint_probability_range) %>% 
+  # now only keep the highest 'ranking' marginal classification
+  group_by(subject_id, episode_number) %>% 
+  slice_max(order_by = marginal_probability, n = 1, with_ties = F) %>% 
+  ungroup() %>% 
+  group_by(ibs_range, marginal_classification, joint_classification) %>%
+  tally() %>%
+  dcast(ibs_range ~ marginal_classification + joint_classification, value.var = "n", fill = 0)
+```
+
+```{r plot confusion matrix ibs range}
+confusion_data_ibsrange %>% 
+  melt(id.vars = "ibs_range") %>% 
+  ggplot(aes(ibs_range, variable, fill = value)) +
+    geom_tile() +
+    scale_fill_gradient(low = "white", high = "red") +
+    geom_text(aes(label = value)) +
+    theme_minimal() +
+    labs(x = "IBS range (1-PNH)",
+         y = "Marginal vs joint classification",
+         fill = "Count")
+```
+
+### Classification comparison
+```{r data for confusion matrix pnh state}
+# Create a confusion matrix for each pair
+confusion_data_pnhstate <- 
+  classification_summary %>% 
+  select(subject_id, sample_id, episode_number, visit_date, days_since_enrolment, days_since_last_episode, starts_with("posterior_"), starts_with("joint"), prop_same_haps_1minusPNH, pnh_range, ibs_range, 
+         # renaming for clarity
+         pnh_classification = classification) %>% 
+  pivot_longer(cols = (starts_with("posterior")), 
+               names_to = "marginal_classification", 
+               values_to = "marginal_probability") %>% 
+  mutate(marginal_classification = case_when(marginal_classification == "posterior_probability_recrudescence" ~ "Recrudescence",
+                                             marginal_classification == "posterior_probability_relapse" ~ "Relapse",
+                                             marginal_classification == "posterior_probability_reinfection" ~ "Reinfection"),
+         marginal_classification = factor(marginal_classification, 
+                                          levels = c("Relapse", "Recrudescence", "Reinfection")),
+         marginal_probability_range = cut(marginal_probability, 
+                                          breaks = c(0, 0.25, 0.5, 0.75, 1), 
+                                          include.lowest = TRUE, 
+                                          labels = c("0-0.25", "0.25-0.5", "0.5-0.75", "0.75-1")),
+         joint_probability_range = cut(joint_probability, 
+                                       breaks = c(0, 0.25, 0.5, 0.75, 1), 
+                                       include.lowest = TRUE, 
+                                       labels = c("0-0.25", "0.25-0.5", "0.5-0.75", "0.75-1")),
+         # pnh_state = case_when(pnh_classification == "Heterologous" ~ "Reinfection",
+         #                       pnh_classification == "Homologous" ~ "Relapse or Recrudescence")
+         pnh_state = case_when(ibs_range == "0-0.25" | ibs_range == "0.25-0.5" ~ "Reinfection",
+                               (ibs_range == "0.5-0.75" | ibs_range == "0.75-1") ~ "Relapse or Recrudescence")
+         ) %>% 
+  select(subject_id, episode_number, days_since_enrolment, ibs_range, pnh_classification, pnh_state, marginal_classification, marginal_probability, marginal_probability_range, joint_classification, joint_probability, joint_probability_range) %>% 
+  # now only keep the highest 'ranking' marginal classification
+  group_by(subject_id, episode_number) %>% 
+  slice_max(order_by = marginal_probability, n = 1, with_ties = F) %>% 
+  ungroup() %>% 
+  group_by(pnh_state, marginal_classification, joint_classification) %>%
+  tally() %>%
+  dcast(pnh_state ~ marginal_classification + joint_classification, value.var = "n", fill = 0)
+```
+
+```{r plot confusion matrix pnh state}
+confusion_data_pnhstate %>% 
+  melt(id.vars = "pnh_state") %>% 
+  ggplot(aes(pnh_state, variable, fill = value)) +
+    geom_tile() +
+    scale_fill_gradient(low = "white", high = "red") +
+    geom_text(aes(label = value)) +
+    theme_minimal() +
+    labs(x = "PNH classification",
+         y = "Marginal vs joint classification",
+         fill = "Count")
+```
