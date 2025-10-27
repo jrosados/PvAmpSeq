@@ -83,11 +83,12 @@ he_marker_PE %>%
   geom_label(aes(x = marker_id, y = he, label=n_hap), size = 2) +
   ylab("Expected heterozygosity (He)") + xlab("")+ ggtitle("Peru")+
   scale_fill_manual(values = colour_markers)+
-  theme_bw(base_family = "", base_size = 10)+ 
+  theme_bw(base_family = "", base_size = 10) +   
   scale_y_continuous(breaks = c(0,0.2,0.4,0.6, 0.8,1.0),
                 label = c("0.0", "0.2", "0.4", "0.6", "0.8", "1.0")) +
-  theme(axis.text.x = element_text(face = "plain", color="black", size = 8, angle = 0), legend.position = "none")+
-  coord_flip()
+  theme(axis.text.x = element_text(face = "plain", color="black", size = 8, angle = 0),   legend.position = "none")+
+coord_flip()
+
 
 ```
 
@@ -653,16 +654,16 @@ haplotypes_all_samples_SI<-
   inner_join(MOI_max_SI, by = "sample") %>% 
   inner_join(he_marker_SI, by = "marker_id")%>%
   mutate(max_moi = as.factor(max_moi)) %>%
-  ggplot(aes(x = sample, y = Frequency ,fill = Haplotype), col = 'black') +
-  geom_bar(position = "stack", stat = "identity")+ 
-  ylab("Within-host frequency (%)") + xlab("Multiplicity of infection")+ ggtitle("Solomon Islands")+ 
+  ggplot(aes(x = sample, y = Frequency ,fill = Haplotype)) +
+  geom_bar(position = "stack", stat = "identity",col = 'black', size = 0.1)+ 
+  ylab("Within-host frequency") + xlab("Multiplicity of infection")+ ggtitle("Solomon Islands")+ 
   scale_colour_manual(values = rainbow(101)) +
   theme_classic(base_size = 10) + 
-  theme(legend.position ="none", axis.text.y = element_text(face = "plain", color="black", size = 4, angle = 0), axis.text.x = element_blank(), axis.ticks = element_blank(), 
+  theme(legend.position ="none", axis.text.y = element_text(face = "plain", color="black", size = 5, angle = 0), axis.text.x = element_blank(), axis.ticks = element_blank(), 
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
-        strip.text.y = element_text(size = 3),
-        strip.text.x = element_text(size = 5),
+        strip.text.y = element_text(size = 7),
+        strip.text.x = element_text(size = 7),
         panel.spacing = unit(.2, "lines"),
         panel.border = element_rect(colour = "black", fill = NA)) +
   scale_y_continuous( breaks = seq(0,1,0.5)) + facet_grid(fct_reorder(marker_id, he, .desc = TRUE) ~ max_moi, 
@@ -670,6 +671,7 @@ haplotypes_all_samples_SI<-
                                                           drop = TRUE) 
 
 print(haplotypes_all_samples_SI)  
+ggsave("figs/figure4_SI.pdf", units="cm", width=16, height=8, dpi=300) 
 
 ```
 #MOI all samples PE
@@ -679,21 +681,24 @@ haplotypes_all_samples_PE<-
   left_join(MOI_max_PE, by = c("sample")) %>%
   inner_join(he_marker_PE, by = "marker_id")%>%
    mutate(max_moi = as.factor(max_moi)) %>%
-  ggplot(aes(x = sample, y = frequency ,fill = haplotype), col = 'black') +
-  geom_bar(position = "stack", stat = "identity")+ 
-  ylab("") + xlab("Multiplicity of infection")+ ggtitle("Peru")+ scale_colour_manual(values = rainbow(101)) +
+  ggplot(aes(x = sample, y = frequency ,fill = haplotype)) +
+  geom_bar(position = "stack", stat = "identity",col = 'black', size = 0.1)+ 
+  ylab("Within-host frequency") + xlab("Multiplicity of infection")+ ggtitle("Peru")+ scale_colour_manual(values = rainbow(101)) +
   theme_classic(base_size = 10) + 
-  theme(legend.position ="none", axis.text.y = element_text(face = "plain", color="black", size = 4, angle = 0), axis.text.x = element_blank(), axis.ticks = element_blank(), 
+  theme(legend.position ="none", axis.text.y = element_text(face = "plain", color="black", size = 5, angle = 0), axis.text.x = element_blank(), axis.ticks = element_blank(), 
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
-        strip.text.y = element_text(size = 3),
-        strip.text.x = element_text(size = 5),
+        strip.text.y = element_text(size = 7),
+        strip.text.x = element_text(size = 7),
         panel.spacing = unit(.2, "lines"),
         panel.border = element_rect(colour = "black", fill = NA)) +
   scale_y_continuous( breaks = seq(0,1,0.5)) + facet_grid(fct_reorder(marker_id, he, .desc = TRUE) ~ max_moi, 
                                                           scales = "free", space = "free", 
                                                           drop = TRUE) 
 print(haplotypes_all_samples_PE)  
+ggsave("figs/figure4_PE.pdf", units="cm", width=16, height=8, dpi=300) 
+
+#write.csv(haplotypes_all_samples_PE$data, "raw_samples_PE.csv", row.names = F)
 ```
 
 #Figure 4
@@ -729,7 +734,7 @@ r <- ggdraw() +
   draw_plot_label(label = c("A", "C", "B", "D"), size = 12,
                  x = c(0, 0, .5,.68  ), y = c(1,.53 ,1, .53))
 print(r)
-ggsave("figs/figure4.tiff", units="cm", width=30, height=18, dpi=300, compression = 'lzw')
+ggsave("figs/figure4.pdf", units="cm", width=30, height=18, dpi=300)  #compression = 'lzw')
 ```
 ```{r echo=F, eval=F}
 save.image("./intermediate_data/intermediate_data.RData")
