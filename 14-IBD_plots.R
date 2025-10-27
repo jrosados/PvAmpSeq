@@ -9,10 +9,10 @@ library(reshape2)
 
 # Load data ---------------------------------------------------------------
 
-sols_all_meta <- readRDS(here("data/final", "sols_all_meta.rds"))
-peru_all_meta <- readRDS(here("data/final", "peru_all_meta.rds"))
-sols_sig_meta <- readRDS(here("data/final", "sols_sig_meta.rds")) 
-peru_sig_meta <- readRDS(here("data/final", "peru_sig_meta.rds"))
+sols_all_meta <- readRDS(here("intermediate_data", "sols_all_meta.rds"))
+peru_all_meta <- readRDS(here("intermediate_data", "peru_all_meta.rds"))
+sols_sig_meta <- readRDS(here("intermediate_data", "sols_sig_meta.rds")) 
+peru_sig_meta <- readRDS(here("intermediate_data", "peru_sig_meta.rds"))
 
 # Wrangle data ------------------------------------------------------------
 
@@ -130,7 +130,7 @@ peru_ibd %>%
 # Pv3Rs results -----------------------------------------------------------
 
 ## Sols proportions 
-load("outputs/Pv3Rs_sols_posteriors_20240827_181146.RData")
+load("outputs/Pv3Rs_sols_posteriors_20250930_160908.RData")
 
 joint_summary <- indiv_posteriors_joint %>% 
   group_by(subject_id, state_pair, joint_probability) %>% 
@@ -189,7 +189,7 @@ save(classification_summary_sols, file = "outputs/sols_infection_classification.
 
 # PERU --------------------------------------------------------------------
 
-load("outputs/Pv3Rs_peru_posteriors_20240904_010047.RData")
+load("outputs/Pv3Rs_peru_posteriors_20250930_164233.RData")
 
 joint_summary <- indiv_posteriors_joint %>% 
   group_by(subject_id, state_pair, joint_probability) %>% 
@@ -231,7 +231,7 @@ classification_summary_peru <- indiv_posteriors_marginal %>%
             by = c("subject_id", "episode_number")) %>% 
   # merge with IBD data
   left_join(peru_ibd,
-            by = c("subject_id", "episode_number")) %>% 
+            by = c("subject_id" = "patientid1", "episode_number")) %>% 
   # create bins for IBD
   mutate(ibd_range = cut(estimate,  
                          breaks = c(0, 0.25, 0.5, 0.75, 1), 
@@ -274,9 +274,9 @@ classification_summary_sols %>%
 
 ## Peru
 classification_summary_peru %>% 
-  mutate(ibd_classification = case_when(ibd_range == "0-0.25" ~ "Heterologous",
-                                        ibd_range == "0.25-0.5" ~ "Difficult to define (0.25-0.5)",
-                                        (ibd_range == "0.5-0.75" | ibd_range == "0.75-1") ~ "Homologous")) %>% 
+  mutate(ibd_classification = case_when(ibd_range == "0-0.25" ~ "Low IBD (<0.25)",
+                                        ibd_range == "0.25-0.5" ~ "Middle IBD (0.25-0.5) (0.25-0.5)",
+                                        (ibd_range == "0.5-0.75" | ibd_range == "0.75-1") ~ "High IBD (0.5-1)")) %>% 
   tabyl(ibd_classification) %>% 
   adorn_totals("col") %>% 
   adorn_percentages()
@@ -309,16 +309,16 @@ classification_summary_peru %>%
 
 ## Sols
 classification_summary_sols %>% 
-  mutate(ibd_classification = case_when(ibd_range == "0-0.25" ~ "Heterologous",
-                                        ibd_range == "0.25-0.5" ~ "Difficult to define (0.25-0.5)",
-                                        (ibd_range == "0.5-0.75" | ibd_range == "0.75-1") ~ "Homologous")) %>% 
+  mutate(ibd_classification = case_when(ibd_range == "0-0.25" ~ "Low IBD (<0.25)",
+                                        ibd_range == "0.25-0.5" ~ "Middle IBD (0.25-0.5)",
+                                        (ibd_range == "0.5-0.75" | ibd_range == "0.75-1") ~ "High IBD (0.5-1)")) %>% 
   tabyl(ibd_classification, treatment_arm) %>% 
   adorn_totals("row") 
 
 classification_summary_sols %>% 
-  mutate(ibd_classification = case_when(ibd_range == "0-0.25" ~ "Heterologous",
-                                         ibd_range == "0.25-0.5" ~ "Difficult to define (0.25-0.5)",
-                                         (ibd_range == "0.5-0.75" | ibd_range == "0.75-1") ~ "Homologous"),
+  mutate(ibd_classification = case_when(ibd_range == "0-0.25" ~ "Low IBD (<0.25)",
+                                         ibd_range == "0.25-0.5" ~ "Middle IBD  (0.25-0.5)",
+                                         (ibd_range == "0.5-0.75" | ibd_range == "0.75-1") ~ "High IBD (0.5-1)"),
          tmt = case_when(treatment_arm == "AL" ~ "non-PQ",
                          TRUE ~ "PQ")) %>% 
   tabyl(ibd_classification, tmt) %>% 
@@ -356,9 +356,9 @@ confusion_data_ibdstate_sols <-
                                        breaks = c(0, 0.25, 0.5, 0.75, 1), 
                                        include.lowest = TRUE, 
                                        labels = c("0-0.25", "0.25-0.5", "0.5-0.75", "0.75-1")),
-         ibd_classification = case_when(ibd_range == "0-0.25" ~ "Heterologous",
-                                        ibd_range == "0.25-0.5" ~ "Difficult to define (0.25-0.5)",
-                                        (ibd_range == "0.5-0.75" | ibd_range == "0.75-1") ~ "Homologous")) %>% 
+         ibd_classification = case_when(ibd_range == "0-0.25" ~ "Low IBD (<0.25)",
+                                        ibd_range == "0.25-0.5" ~ "Middle IBD  (0.25-0.5)",
+                                        (ibd_range == "0.5-0.75" | ibd_range == "0.75-1") ~ "High IBD (0.5-1)")) %>% 
   select(subject_id, episode_number, days_since_enrolment, ibd_range, ibd_classification, marginal_classification, marginal_probability, marginal_probability_range, joint_classification, joint_probability, joint_probability_range) %>% 
   # now only keep the highest 'ranking' marginal classification
   group_by(subject_id, episode_number) %>% 
@@ -437,9 +437,9 @@ confusion_data_ibdstate_peru <-
                                        breaks = c(0, 0.25, 0.5, 0.75, 1), 
                                        include.lowest = TRUE, 
                                        labels = c("0-0.25", "0.25-0.5", "0.5-0.75", "0.75-1")),
-         ibd_classification = case_when(ibd_range == "0-0.25" ~ "Heterologous",
-                                        ibd_range == "0.25-0.5" ~ "Difficult to classify (0.25-0.5)",
-                                        (ibd_range == "0.5-0.75" | ibd_range == "0.75-1") ~ "Homologous")) %>% 
+         ibd_classification = case_when(ibd_range == "0-0.25" ~ "Low IBD (<0.25)",
+                                        ibd_range == "0.25-0.5" ~ "Middle IBD (0.25-0.5)",
+                                        (ibd_range == "0.5-0.75" | ibd_range == "0.75-1") ~ "High IBD (0.5-1)")) %>% 
   select(subject_id, episode_number, days_since_enrolment, ibd_range, ibd_classification, marginal_classification, marginal_probability, marginal_probability_range, joint_classification, joint_probability, joint_probability_range) %>% 
   # now only keep the highest 'ranking' marginal classification
   group_by(subject_id, episode_number) %>% 
@@ -557,3 +557,4 @@ classification_summary_sols %>%
                                "Reinfection" = "magenta3")) +
   facet_wrap(joint_classification~.) +
   theme_minimal()
+

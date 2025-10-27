@@ -138,11 +138,10 @@ age_moi_SI<- hap_SI_epi %>%
   filter(infoD == "0") %>%
   select(age_y, max_moi, info) %>% distinct() %>%
   ggplot() +
-  geom_point(aes(x = age_y, y = max_moi, color= info),
+  geom_point(aes(x = age_y, y = max_moi),
              size = 2, alpha = 0.8) +
   ggtitle("Solomon Islands") +
   ylab("max MOI at the baseline") + xlab(" age (y)") +
-  scale_fill_brewer(palette="Paired") +
   theme_classic(base_size = 12) + 
   theme(axis.text.x = element_text(face = "plain", color="black", size = 8, angle = 90), legend.position = "none") 
 
@@ -161,11 +160,10 @@ age_moi_PE<- hap_PE_epi %>%
   filter(day == "Day 0") %>%
   select(age, max_moi, sample) %>% distinct() %>%
   ggplot() +
-  geom_point(aes(x = age, y = max_moi, color= sample),
+  geom_point(aes(x = age, y = max_moi),
              size = 2, alpha = 0.8) +
   ggtitle("Peru") +
   ylab("max MOI at the baseline") + xlab(" age (y)") +
-  scale_fill_brewer(palette="Paired") +
   theme_classic(base_size = 12) + 
   theme(axis.text.x = element_text(face = "plain", color="black", size = 8, angle = 90), legend.position = "none") 
 
@@ -301,14 +299,14 @@ days_recurr_moi_SI<- hap_SI_epi %>%
   distinct() %>% 
   # Calculate delay since previous infection, within each ID
   group_by(info) %>% 
-  mutate(delay_since_prev_ep = as.numeric( vis_date - first(vis_date), 
+  mutate(delay_since_prev_ep = as.numeric( vis_date - dplyr::first(vis_date), 
                                                    units = "days", na.rm=T),
          site = "Solomon Islands",
          recurrence =rank(vis_date)) %>%
     left_join(MOI_max_SI, by = c("sample")) %>%
 filter(!is.na(vis_date)) %>%
   select(info, sample,  trt_label, vis_date,delay_since_prev_ep,max_moi,site,recurrence) %>%
-   rename(Patient = info,
+   dplyr::rename(Patient = info,
           treatment = trt_label,
           date = vis_date) %>%
   filter(!delay_since_prev_ep ==0)
@@ -325,7 +323,7 @@ days_recurr_moi_PE<- hap_PE_epi %>%
   distinct() %>% 
   # Calculate delay since previous infection, within each ID
   group_by(PatientName) %>% 
-  mutate(delay_since_prev_ep = as.numeric( date - first(date), 
+  mutate(delay_since_prev_ep = as.numeric( date - dplyr::first(date), 
                                                    units = "days", na.rm=T),
          medicamento2 = case_when(medicamento2 == "C" ~ "CQ+PQ",
                                   medicamento2 == "-1" ~ "No treatment"))%>%
@@ -370,9 +368,9 @@ days_recurr_change_moi_SI<- hap_SI_epi %>%
   distinct() %>% 
   # Calculate delay since previous infection, within each ID
   group_by(info) %>% 
-  mutate(delay_since_prev_ep = as.numeric( vis_date - first(vis_date), 
+  mutate(delay_since_prev_ep = as.numeric( vis_date - dplyr::first(vis_date), 
                                                    units = "days", na.rm=T),
-        change_moi = as.numeric(max_moi -lag(max_moi, default = first(max_moi))),
+        change_moi = as.numeric(max_moi -lag(max_moi, default = dplyr::first(max_moi))),
          site = "Solomon Islands",
          change = case_when(change_moi==0 ~"no change",
                       change_moi<0 ~"decrease",
@@ -380,7 +378,7 @@ days_recurr_change_moi_SI<- hap_SI_epi %>%
          recurrence =rank(vis_date)) %>%
 filter(!is.na(vis_date))%>%
   select(info, sample, max_moi, trt_label, vis_date,delay_since_prev_ep,change_moi,site, clones, change,recurrence) %>%
-   rename(Patient = info,
+   dplyr::rename(Patient = info,
           treatment = trt_label,
           date = vis_date)%>%
   filter(!delay_since_prev_ep ==0)
@@ -396,9 +394,9 @@ filter(episodes >1) %>%
   distinct() %>% 
   # Calculate delay since previous infection, within each ID
   group_by(PatientName) %>% 
-  mutate(delay_since_prev_ep = as.numeric( date - first(date), 
+  mutate(delay_since_prev_ep = as.numeric( date - dplyr::first(date), 
                                                    units = "days", na.rm=T),
-         change_moi = as.numeric(max_moi -lag(max_moi, default = first(max_moi))),
+         change_moi = as.numeric(max_moi -lag(max_moi, default = dplyr::first(max_moi))),
          medicamento2 = case_when(medicamento2 == "C" ~ "CQ+PQ",
                                   medicamento2 == "-1" ~ "No treatment"),
          site = "Peru", 
@@ -421,7 +419,7 @@ days_recurr_change_moi_plot <-
   geom_point(aes(x = delay_since_prev_ep, y = change_moi, color= treatment),
              size = 2, alpha = 0.8) +
   ggtitle("") +
-  ylab("Change in MOI between\nrecurrent infections") + xlab("days to next recurrent infection") +
+  ylab("Change in MOI between\nrecurrent infections") + xlab("days since preceding infection") +
   scale_fill_brewer(palette="Paired") +
   theme_classic(base_size = 12) + 
   theme(axis.text.x = element_text(face = "plain", color="black", size = 8, angle = 90), legend.position = "bottom")+

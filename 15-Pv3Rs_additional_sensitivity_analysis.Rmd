@@ -10,6 +10,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(Pv3Rs)
 library(patchwork)
+library(janitor)
 
 source("helper_functions.R")
 ```
@@ -126,7 +127,7 @@ load("outputs/sols_infection_classification.RData")
 
 ```{r}
 # order mhaps by most He to least
-panel_he <- c("Chr05", "Chr02", "Chr07", "Chr14", "Chr13", "Chr09", "Chr10", "Chr03", "Chr11", "Chr01", "Chr08")
+panel_he <- c("Chr05", "Chr02", "Chr07", "Chr14","Chr09", "Chr13", "Chr10", "Chr03", "Chr11", "Chr01", "Chr08")
   
 plot_mhap_sens_sols <- marginal_summary_rm_mhap %>%
   mutate(
@@ -382,7 +383,7 @@ load("outputs/peru_infection_classification.RData")
 
 ```{r}
 # order mhaps by most He to least
-panel_he <- c("Chr05", "Chr11", "Chr07", "Chr08", "Chr13", "Chr02",  "Chr14",  "Chr09", "Chr03", "Chr01", "Chr10")
+panel_he <- c("Chr05", "Chr11", "Chr07", "Chr08", "Chr13", "Chr02", "Chr09", "Chr03", "Chr14", "Chr01", "Chr10")
   
 plot_mhap_sens_peru <- marginal_summary_rm_mhap %>%
   mutate(

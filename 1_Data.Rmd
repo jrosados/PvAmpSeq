@@ -38,7 +38,7 @@ library(tableone)
 
 ### SELECTING SAMPLE HAPLOTYPES WITH >1% FREQUENCY AND PRESENT IN AT LEAST >=2 SAMPLES
 Filter_hap_SI <- readRDS(here("raw_data","SI_seq_tbl_End_Filter.rds")) %>%
-  filter(Frequency >= 0.01) 
+  filter(Frequency >= 0.1) 
 
 Exclude_singleton_SI<- Filter_hap_SI%>%
    dplyr::group_by(Haplotype) %>%
@@ -66,7 +66,7 @@ hap_SI_epi<-
 #########################
 ### SELECTING SAMPLE HAPLOTYPES WITH >1% FREQUENCY AND PRESENT IN AT LEAST >=2 SAMPLES
 Filter_hap_PE <- readRDS(here("raw_data", "PE_seq_flt_tbl.rds")) %>%
-  filter(frequency >= 0.01)
+  filter(frequency >= 0.1)
   
 Exclude_singleton_PE<- Filter_hap_PE%>%
    dplyr::group_by(haplotype) %>%
@@ -124,6 +124,8 @@ amp_success_samp_PE<- hap_PE_epi %>%
 sum(amp_success_samp_PE$amp_success < "0.6")
 
 hap_PE_epi <- hap_PE_epi[hap_PE_epi$sample %in% amp_success_samp_PE$sample,]
+
+dir.create("intermediate_data")
 
 
 write_rds(amp_success_samp_SI,"intermediate_data/sols_amp_success.rds", "xz")
@@ -300,7 +302,7 @@ print(table_succes_rate_PE,showAllLevels = TRUE,
 
 ```
 ```{r echo=F, eval=F}
-dir.create("intermediate_data")
+
 save.image("./intermediate_data/intermediate_data.RData")
 ```
 

@@ -105,7 +105,7 @@ PRIOR_3RS <- c("C" = 0.10, "L" = 0.45, "I" = 0.45)
 
 Read in data from Peru:
 ```{r read peru data}
-peru <- read.csv(here("data/final", "merged_PE.csv"))
+peru <- readRDS(here("intermediate_data", "peru_data_merged.rds"))
 
 # head(peru)
 # names(peru)
@@ -347,7 +347,7 @@ fs_df
 
 ## Pick an individual at random to run Pv3Rs
 # indiv_name <- sample(unique(analysis_data$subject_id), size = 1)
-indiv_name <- "M1A020B"
+indiv_name <- "A020B"
 
 ## Prepare the data
 # 1- Subset haplotype data to specific individual and apply filters
@@ -421,7 +421,7 @@ indiv_posterior
 The joint posterior probability of reinfection is 99.8%, when we look at the genetic data, this is in line with the inferred probability of relapse. 
 ```{r plot haps}
 peru_recurrent %>% 
-  filter(patient_name == "M1A020B") %>% 
+  filter(patient_name == "A020B") %>% 
   ggplot(aes(x = haplotype, y = factor(date), fill = factor(haplotype))) +
   geom_tile() +
     facet_grid(~marker_id, scales = "free_x") +
@@ -1051,9 +1051,9 @@ posterior_summary %>%
 
 ## Comparison to IBS and IBD estimates
 ```{r read pnh and ibd data}
-peru_pnh <- read.csv(here("data/final", "peru_PNH_data.csv"))
-ibd_r_data <- readRDS(here("data/final", "peru_all_meta.rds"))
-ibd_rhat_data <- readRDS(here("data/final", "peru_sig_meta.rds"))
+peru_pnh <- readRDS(here("intermediate_data", "peru_data_classification.rds"))
+ibd_r_data <- readRDS(here("intermediate_data", "peru_all_meta.rds"))
+ibd_rhat_data <- readRDS(here("intermediate_data", "peru_sig_meta.rds"))
 ```
 
 For direct comparison with the we can only look at the paired comparisons between baseline samples and 'follow-up' recurrent samples, but not other pw comparisons for a given participant. 

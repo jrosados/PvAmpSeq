@@ -57,7 +57,7 @@ merged_PE <- hap_PE_epi %>%
                            aa == "2015" & mm == "10"~ "11",
                            aa == "2015" & mm == "11"~ "12",
                            aa == "2015" & mm == "12"~ "13"),
-    episodes = as.factor(episodes),
+    episodes = as.numeric(episodes),
          PatientName = gsub("[M1]","", PatientName)) 
 
 write_rds(merged_SI,"intermediate_data/sols_data_merged.rds", "xz")

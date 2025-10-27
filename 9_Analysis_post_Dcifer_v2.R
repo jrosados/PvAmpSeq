@@ -41,9 +41,9 @@ sols_PNH_r_all<-
   filter(comparison_type=="paired") %>%
   filter(sampleid2 %in% sols_data$sample[sols_data$follow.x=="baseline"]) %>%
   right_join(sols_PNH_data, by =c("sampleid1" ="sample")) %>%
- mutate(IBD_classification= case_when(estimate >=0.5 ~ "Homologous",
-                                      estimate <=0.25 ~"Heterologous", 
-                                      estimate >0.25 |estimate <0.5  ~"Difficult to define")) %>%
+ mutate(IBD_classification= case_when(estimate >=0.5 ~ "High IBD",
+                                      estimate <=0.25 ~"Low IBD", 
+                                      estimate >0.25 |estimate <0.5  ~"medium IBD")) %>%
   rename(IBD = estimate) %>%
   select(sampleid1,Patient, treatment, treatment2, recurrence, 
          delay_since_prev_ep, change_moi,max_moi,clones,IBD,IBD_classification)
@@ -56,9 +56,9 @@ peru_PNH_r_all<-
   #two comparisons from diff homes but with similar patient name. CAH vs LUP
   filter(sampleid2 %in% peru_data$sample_id[peru_data$day=="Day 0"]) %>%
   right_join(peru_PNH_data, by =c("sampleid1" ="sample")) %>%
-  mutate(IBD_classification= case_when(estimate >=0.5 ~ "Homologous",
-                                       estimate <=0.25 ~"Heterologous", 
-                                       estimate >0.25 |estimate <0.5  ~"Difficult to define")) %>%
+  mutate(IBD_classification= case_when(estimate >=0.5 ~ "High IBD",
+                                       estimate <=0.25 ~"Low IBD", 
+                                       estimate >0.25 |estimate <0.5  ~"medium IBD")) %>%
   rename(IBD = estimate) %>%
   select(sampleid1,Patient, treatment, recurrence, 
          delay_since_prev_ep, change_moi,max_moi,clones,IBD,IBD_classification)

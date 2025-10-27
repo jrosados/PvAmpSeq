@@ -16,7 +16,7 @@ source("helper_functions.R")
 # Solomon Islands
 ## Update null distribution analysis
 ```{r input data}
-sols <- read.csv(here("data/final", "sols_raw_data.csv"))
+sols <- readRDS(here("intermediate_data", "sols_data_merged.rds"))
 
 sols_all_patients <- sols %>%
         clean_names() %>% 
@@ -132,7 +132,7 @@ get_fdr_bs_summary(fdr_df, 1000)
 
 ## Update null distribution analysis
 ```{r input data}
-peru <- read.csv(here("data/final", "merged_PE.csv"))
+peru <- readRDS(here("intermediate_data", "peru_data_merged.rds"))
 
 peru_all_patients <- peru %>%
         clean_names() %>% 
