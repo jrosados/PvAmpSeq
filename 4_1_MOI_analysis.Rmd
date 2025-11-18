@@ -442,7 +442,7 @@ ggsave("figs/Supp_figure7.tiff", units="cm", width=25.14, height=18.12, dpi=300,
 
 ```
 
-###Tables days recurrencia and MOI
+###Tables days recurrence and MOI
 ```{r, echo=FALSE, message=FALSE,}
 table_days_recurr_moi_PE<- CreateTableOne(vars = c("delay_since_prev_ep"), strata = "clones", data = days_recurr_change_moi_PE)
 
