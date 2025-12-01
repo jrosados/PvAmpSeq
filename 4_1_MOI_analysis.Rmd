@@ -137,14 +137,13 @@ age_moi_SI<- hap_SI_epi %>%
   left_join(MOI_max_SI, by = c("sample")) %>%
   filter(infoD == "0") %>%
   select(age_y, max_moi, info) %>% distinct() %>%
-  ggplot() +
-  geom_point(aes(x = age_y, y = max_moi, color= info),
-             size = 2, alpha = 0.8) +
+  ggplot(aes(x = as.factor(max_moi), y = age_y )) +
+  geom_violin()+
+  geom_point(size = 2, alpha = 0.4, position = position_jitterdodge()) +
   ggtitle("Solomon Islands") +
-  ylab("max MOI at the baseline") + xlab(" age (y)") +
-  scale_fill_brewer(palette="Paired") +
+  xlab("max MOI at the baseline") + ylab(" age (y)") +
   theme_classic(base_size = 12) + 
-  theme(axis.text.x = element_text(face = "plain", color="black", size = 8, angle = 90), legend.position = "none") 
+  theme(axis.text.x = element_text(face = "plain", color="black", size = 8), legend.position = "none") 
 
 print(age_moi_SI)
 cor.test(age_moi_SI$data$age_y, age_moi_SI$data$max_moi)
@@ -160,14 +159,13 @@ age_moi_PE<- hap_PE_epi %>%
   left_join(MOI_max_PE, by = c("sample")) %>%
   filter(day == "Day 0") %>%
   select(age, max_moi, sample) %>% distinct() %>%
-  ggplot() +
-  geom_point(aes(x = age, y = max_moi, color= sample),
-             size = 2, alpha = 0.8) +
+  ggplot(aes(x = as.factor(max_moi), y = age )) +
+  geom_violin()+
+  geom_point(size = 2, alpha = 0.4,position = position_jitterdodge()) +
   ggtitle("Peru") +
-  ylab("max MOI at the baseline") + xlab(" age (y)") +
-  scale_fill_brewer(palette="Paired") +
+  xlab("max MOI at the baseline") + ylab(" age (y)") +
   theme_classic(base_size = 12) + 
-  theme(axis.text.x = element_text(face = "plain", color="black", size = 8, angle = 90), legend.position = "none") 
+  theme(axis.text.x = element_text(face = "plain", color="black", size = 8), legend.position = "none") 
 
 cor.test(age_moi_PE$data$age, age_moi_PE$data$max_moi)
 
@@ -421,7 +419,7 @@ days_recurr_change_moi_plot <-
   geom_point(aes(x = delay_since_prev_ep, y = change_moi, color= treatment),
              size = 2, alpha = 0.8) +
   ggtitle("") +
-  ylab("Change in MOI between\nrecurrent infections") + xlab("days to next recurrent infection") +
+  ylab("Change in MOI between\nrecurrent infections") + xlab("days since preceding infection") +
   scale_fill_brewer(palette="Paired") +
   theme_classic(base_size = 12) + 
   theme(axis.text.x = element_text(face = "plain", color="black", size = 8, angle = 90), legend.position = "bottom")+
