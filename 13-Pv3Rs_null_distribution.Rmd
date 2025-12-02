@@ -45,13 +45,13 @@ random_pairs <- randomize_pairs_sols(sols_all_patients)
 
 plot_new_pairs_sols(random_pairs) + labs(subtitle = "Iteration 1")
 
-analysis_data <- get_analysis_data_sols(random_pairs)
+analysis_data_SI <- get_analysis_data_sols(random_pairs)
 
-fs <- analysis_data %>% 
+fs <- analysis_data_SI %>% 
   calculate_freqs() %>% 
   pluck("fs")
 
-test <- compute_null(analysis_data, fs, gv)
+test <- compute_null(analysis_data_SI, fs, gv)
 test_marginal_summary <- test %>% 
   pluck("indiv_posteriors_marginal") %>% 
   get_marginal_summary()
@@ -79,17 +79,17 @@ marginal_results <- map_dfr(1:N_sim, function(i) {
   # p <- plot_new_pairs_sols(random_pairs) + labs(subtitle = str_glue("Iteration {i}"))
   # print(p)
   
-  analysis_data <- get_analysis_data_sols(random_pairs)
+  analysis_data_SI <- get_analysis_data_sols(random_pairs)
   
   # 2) Freqs
-  fs <- analysis_data %>%
+  fs <- analysis_data_SI %>%
     calculate_freqs() %>% 
     pluck("fs")
   
   # 3) compute Pv3Rs for each simualted dataset
   gv <- set_global_vars()
   
-  results <- compute_null(analysis_data, fs, gv)
+  results <- compute_null(analysis_data_SI, fs, gv)
   
   #  get stats for posterior distribution of each classification
   # and get N's and %s for each classification 
@@ -163,14 +163,14 @@ random_pairs <- randomize_pairs_peru(peru_all_patients)
 
 plot_new_pairs_peru(random_pairs) + labs(subtitle = "Iteration 1")
 
-analysis_data <- get_analysis_data_peru(random_pairs)
+analysis_data_PE <- get_analysis_data_peru(random_pairs)
 
-fs <- analysis_data %>% 
+fs <- analysis_data_PE %>% 
   calculate_freqs() %>% 
   pluck("fs")
 
 gv <- set_global_vars(PRIOR_3RS = c("C" = 0.10, "L" = 0.45, "I" = 0.45))
-test <- compute_null(analysis_data, fs, gv)
+test <- compute_null(analysis_data_PE, fs, gv)
 
 test_marginal_summary <- test %>% 
   pluck("indiv_posteriors_marginal") %>% 
@@ -199,17 +199,17 @@ marginal_results <- map_dfr(1:N_sim, function(i) {
   # p <- plot_new_pairs_peru(random_pairs) + labs(subtitle = str_glue("Iteration {i}"))
   # print(p)
   
-  analysis_data <- get_analysis_data_peru(random_pairs)
+  analysis_data_PE <- get_analysis_data_peru(random_pairs)
   
   # 2) Freqs
-  fs <- analysis_data %>%
+  fs <- analysis_data_PE %>%
     calculate_freqs() %>% 
     pluck("fs")
   
   # 3) compute Pv3Rs for each simualted dataset
   gv <- set_global_vars(PRIOR_3RS = c("C" = 0.10, "L" = 0.45, "I" = 0.45))
   
-  results <- compute_null(analysis_data, fs, gv)
+  results <- compute_null(analysis_data_PE, fs, gv)
   
   #  get stats for posterior distribution of each classification
   # and get N's and %s for each classification 
