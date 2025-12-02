@@ -9,10 +9,10 @@ library(reshape2)
 
 # Load data ---------------------------------------------------------------
 
-sols_all_meta <- readRDS(here("data/final", "sols_all_meta.rds"))
-peru_all_meta <- readRDS(here("data/final", "peru_all_meta.rds"))
-sols_sig_meta <- readRDS(here("data/final", "sols_sig_meta.rds")) 
-peru_sig_meta <- readRDS(here("data/final", "peru_sig_meta.rds"))
+sols_all_meta <- readRDS(here("intermediate_data", "sols_all_meta.rds"))
+peru_all_meta <- readRDS(here("intermediate_data", "peru_all_meta.rds"))
+sols_sig_meta <- readRDS(here("intermediate_data", "sols_sig_meta.rds")) 
+peru_sig_meta <- readRDS(here("intermediate_data", "peru_sig_meta.rds"))
 
 # Wrangle data ------------------------------------------------------------
 
@@ -34,7 +34,7 @@ peru_ibd <- peru_all_meta %>%
   # merge with analysis_data to get patient_name and 'day' info
   left_join(analysis_data %>% 
               select(sample_id, subject_id, 
-                     day = days_since_enrolment) %>% 
+                     day = days_since_last_episode) %>% 
               distinct(),
             by = c("sampleid1" = "sample_id")) %>% 
   rename("subject_id1" = "subject_id",
@@ -42,7 +42,7 @@ peru_ibd <- peru_all_meta %>%
   # do the same for sample id 2 in pair - merge with analysis_data to get patient_name and 'day' info
   left_join(analysis_data %>% 
               select(sample_id, subject_id, 
-                     day = days_since_enrolment) %>% 
+                     day = days_since_last_episode) %>% 
               distinct(),
             by = c("sampleid2" = "sample_id")) %>% 
   rename("day_id2" = "day") %>% 

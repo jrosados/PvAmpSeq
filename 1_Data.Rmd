@@ -125,10 +125,6 @@ sum(amp_success_samp_PE$amp_success < "0.6")
 
 hap_PE_epi <- hap_PE_epi[hap_PE_epi$sample %in% amp_success_samp_PE$sample,]
 
-
-write_rds(amp_success_samp_SI,"intermediate_data/sols_amp_success.rds", "xz")
-write_rds(amp_success_samp_PE,"intermediate_data/peru_amp_success.rds", "xz")
-
 ```
 
 ##Description of SI samples. Selecting SI samples with follow up (paired samples)
@@ -301,6 +297,15 @@ print(table_succes_rate_PE,showAllLevels = TRUE,
 ```
 ```{r echo=F, eval=F}
 dir.create("intermediate_data")
+```
+
+```{r}
+
+write_rds(amp_success_samp_SI,"intermediate_data/sols_amp_success.rds", "xz")
+write_rds(amp_success_samp_PE,"intermediate_data/peru_amp_success.rds", "xz")
+```
+
+```{r}
 save.image("./intermediate_data/intermediate_data.RData")
 ```
 

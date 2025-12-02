@@ -9,6 +9,8 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(Pv3Rs)
 library(rsample)
+library(here)
+
 
 source("helper_functions.R")
 ```
@@ -16,7 +18,10 @@ source("helper_functions.R")
 # Solomon Islands
 ## Update null distribution analysis
 ```{r input data}
-sols <- read.csv(here("data/final", "sols_raw_data.csv"))
+#sols <- read.csv(here("data/final", "sols_raw_data.csv"))
+
+sols <- read_rds(here("intermediate_data", "sols_data_merged.rds"))
+
 
 sols_all_patients <- sols %>%
         clean_names() %>% 
@@ -132,7 +137,7 @@ get_fdr_bs_summary(fdr_df, 1000)
 
 ## Update null distribution analysis
 ```{r input data}
-peru <- read.csv(here("data/final", "merged_PE.csv"))
+peru <- read_rds(here("intermediate_data", "peru_data_merged.rds"))
 
 peru_all_patients <- peru %>%
         clean_names() %>% 
@@ -140,12 +145,13 @@ peru_all_patients <- peru %>%
         distinct() %>% 
         arrange(sample) %>% 
         mutate(date = mdy(date))
+               #episodes = as.numeric(episodes))
 ```
 
 ```{r eval=F}
 peru_all_patients %>% 
   distinct(info, episodes) %>%
-  ggplot(aes(x = episodes)) +
+  ggplot(aes(x = as.numeric(episodes))) +
     geom_bar() +
     scale_x_continuous(breaks = scales::pretty_breaks(n=5)) +
     theme_bw()

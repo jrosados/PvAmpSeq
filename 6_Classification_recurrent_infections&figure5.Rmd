@@ -645,6 +645,37 @@ table_time_classification_pe<- CreateTableOne(vars = c("delay_since_prev_ep"), s
 print(table_time_classification_pe,showAllLevels = TRUE,
       nonnormal = "delay_since_prev_ep")
 ```
+```{r}
+
+sols_pnh_data<- Haplo_Class_all_SI %>% 
+   left_join(days_recurr_change_moi_SI, by = c("sample")) %>%
+  distinct() %>%
+  filter(!is.na(treatment)) %>%
+  group_by(Patient)%>%
+  mutate(treatment2 = ifelse(treatment == "AL","AL", "PQ" ),
+         Prop_het= (1- Prop_NewMarker_weightedHe),
+         identity = cut(Prop_NewMarker_weightedHe, breaks = c(-Inf,0,0.75,1)))%>%
+         select(sample,Patient,date,treatment,treatment2, recurrence,Prop_het,delay_since_prev_ep,change_moi,max_moi,clones,identity, Classification) 
+
+write.csv(sols_pnh_data,"intermediate_data/sols_pnh_data.csv")
+
+peru_pnh_data<- Haplo_Class_all_PE %>%
+  left_join(days_recurr_change_moi_PE, by=c("sample")) %>%
+  group_by(Patient)%>%
+  mutate(Prop_het= (1- Prop_NewMarker_weightedHe),
+         identity = cut(Prop_NewMarker_weightedHe, breaks = c(-Inf,0,0.75,1)))%>%
+  select(sample,Patient,date,treatment, recurrence,Prop_het,delay_since_prev_ep,change_moi,max_moi,clones,identity, Classification)
+
+write.csv(peru_pnh_data,"intermediate_data/peru_pnh_data.csv")
+
+#For future uses
+write.csv(MOI_max_PE,"intermediate_data/MOI_max_PE.csv")
+write.csv(MOI_max_SI,"intermediate_data/MOI_max_SI.csv")
+
+
+
+```
+
 ```{r echo=F, eval=F}
 save.image("./intermediate_data/intermediate_data.RData")
 ```
