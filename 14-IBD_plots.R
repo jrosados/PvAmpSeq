@@ -6,9 +6,13 @@ library(patchwork)
 library(janitor)
 library(ggpubr)
 library(reshape2)
+library(cowplot)
+library(table1)
+library(tableone)
+
 
 # Load data ---------------------------------------------------------------
-
+load("intermediate_data/intermediate_data.RData")
 sols_all_meta <- readRDS(here("intermediate_data", "sols_all_meta.rds"))
 peru_all_meta <- readRDS(here("intermediate_data", "peru_all_meta.rds"))
 sols_sig_meta <- readRDS(here("intermediate_data", "sols_sig_meta.rds")) 
@@ -34,7 +38,7 @@ peru_ibd <- peru_all_meta %>%
   # merge with analysis_data to get patient_name and 'day' info
   left_join(analysis_data %>% 
               select(sample_id, subject_id, 
-                     day = days_since_last_episode) %>% 
+                     day = days_since_enrolment) %>% 
               distinct(),
             by = c("sampleid1" = "sample_id")) %>% 
   rename("subject_id1" = "subject_id",
@@ -42,7 +46,7 @@ peru_ibd <- peru_all_meta %>%
   # do the same for sample id 2 in pair - merge with analysis_data to get patient_name and 'day' info
   left_join(analysis_data %>% 
               select(sample_id, subject_id, 
-                     day = days_since_last_episode) %>% 
+                     day = days_since_enrolment) %>% 
               distinct(),
             by = c("sampleid2" = "sample_id")) %>% 
   rename("day_id2" = "day") %>% 
@@ -57,56 +61,256 @@ peru_ibd <- peru_all_meta %>%
 
 # Plots -------------------------------------------------------------------
 
+
+# peru_ibd_modified <- peru_ibd %>%
+#   mutate(ibd_range = cut(estimate,
+#                          breaks = c(0, 0.25, 0.5, 0.75, 1),
+#                          include.lowest = TRUE,
+#                          labels = c("0-0.25", "0.25-0.5", "0.5-0.75", "0.75-1")))
+
+SI_all_samples_day_recurrence <- Epi_data_SI %>%
+  mutate(
+    SampleID = paste0("AR-", str_pad(studyid, width = 3, side = "left", pad = "0"), "-", vis_visit_day),
+  studyid= as.character(studyid)) %>%
+    #mutate(SampleName = paste0("AR-",studyid,"-",vis_visit_day))
+  inner_join(AmpSeq_samples_data_SI,
+             by =c("studyid" = "SampleName",
+                    "SampleID")) %>%
+  select(vis_date, studyid,SampleID) %>%
+  mutate(date = as.Date(vis_date, format = "%m/%d/%Y")) %>%
+  arrange(studyid, SampleID, date) %>% 
+  distinct() %>% 
+  # Calculate delay since previous infection, within each ID
+  group_by(studyid) %>% 
+  mutate(delay_since_prev_ep = as.numeric( date - first(date), 
+                                           units = "days", na.rm=T),
+         recurrence =rank(date)) %>%
+  select(studyid, SampleID, delay_since_prev_ep,recurrence) %>%
+  #filter( !delay_since_prev_ep ==0) %>%
+  filter(recurrence >1) %>%
+  select(-recurrence) %>%
+  rename(patientid1 = studyid, 
+         sampleid1 = SampleID,
+         day_id1 = delay_since_prev_ep) %>%
+  left_join(sols_ibd %>% select(sampleid1,estimate, patientid1),
+            by=c("sampleid1", "patientid1")) 
+
+
+
+PE_all_samples_day_recurrence <- Epi_data_PE %>% 
+  filter(cod_samp %in% AmpSeq_samples_data_PE$SampleID)  %>%
+  select(cod_per, cod_samp, date) %>%
+  mutate(date = as.Date(date, format = "%m/%d/%Y")) %>%
+  arrange(cod_per, cod_samp, date) %>% 
+  distinct() %>% 
+  # Calculate delay since previous infection, within each ID
+  group_by(cod_per) %>% 
+  mutate(delay_since_prev_ep = as.numeric( date - first(date), 
+                                           units = "days", na.rm=T),
+           recurrence =rank(date)) %>%
+  select(cod_per, cod_samp, delay_since_prev_ep,recurrence) %>%
+  #filter( !delay_since_prev_ep ==0) %>%
+  filter(recurrence >1) %>%
+  select(-recurrence) %>%
+  rename(patientid1 = cod_per, 
+         sampleid1 = cod_samp,
+         day_id1 = delay_since_prev_ep) %>%
+  left_join(peru_ibd %>% select(sampleid1,estimate, patientid1, day_id1)) 
+  
+
+# Define your desired colors
+my_colors <- c("0-0.25" = "#66C2A5",  # Color 1 (from Set2 palette)
+               "0.25-0.5" = "#FC8D62", # Color 2
+               "0.5-0.75" = "#8DA0CB", # Color 3
+               "0.75-1" = "#E78AC3",   # Color 4
+               "ND" = "gray50")        # Gray for Not Detected
+
+
 ## IBD distribution
-sols_ibd %>% 
+sols_ibd_plot_distribution<- sols_ibd %>% 
   filter(comparison_type == "paired") %>% 
   ggplot(aes(x = estimate)) +
   geom_histogram(bins = 20) +
   scale_y_continuous(limits = c(0, 25)) +
-  labs(x = "IBD",
+  labs(x = "IBD estimate",
        y = "Frequency",
        title = "Solomon Islands") +
-  theme_bw(base_size = 14) +
+  theme_bw(base_size = 13) 
 
+peru_ibd_plot_distribution<-
 peru_ibd %>% 
   filter(comparison_type == "paired") %>% 
   ggplot(aes(x = estimate)) +
   geom_histogram(bins = 20) +
   scale_y_continuous(limits = c(0, 25)) +
-  labs(x = "IBD",
+  labs(x = "IBD estimate",
        y = "Frequency",
        title = "Peru") +
-  theme_bw(base_size = 14) 
+  theme_bw(base_size = 13) 
 
 ## Days since baseline and IBD
-sols_ibd %>% 
+sols_ibd_days_plot<- sols_ibd %>% 
+  #SI_all_samples_day_recurrence %>%
   mutate(ibd_range = cut(estimate,  
                          breaks = c(0, 0.25, 0.5, 0.75, 1), 
                          include.lowest = TRUE, 
                          labels = c("0-0.25", "0.25-0.5", "0.5-0.75", "0.75-1"))) %>% 
-  ggplot(aes(x = day_id1, y = reorder(patientid1, estimate), color = ibd_range)) +
-    geom_point(size = 2) +
-    scale_color_brewer(palette = "Set2") +
-    labs(x = "Days since baseline infection",
-         y = "Patient ID",
-         color = "IBD estimate",
-         title = "Solomon Islands") +
-    theme_bw(base_size = 13) +
-
-peru_ibd %>% 
-  mutate(ibd_range = cut(estimate,  
-                         breaks = c(0, 0.25, 0.5, 0.75, 1), 
-                         include.lowest = TRUE, 
-                         labels = c("0-0.25", "0.25-0.5", "0.5-0.75", "0.75-1"))) %>% 
+  #mutate(ibd_range = fct_explicit_na(ibd_range, na_level = "ND"))  %>%
   ggplot(aes(x = day_id1, y = reorder(patientid1, estimate), color = ibd_range)) +
   geom_point(size = 2) +
   scale_color_brewer(palette = "Set2") +
+  #scale_color_manual(values = my_colors) + # Apply custom colors
+      labs(x = "Days since baseline infection",
+         y = "Patient ID",
+         color = "IBD estimate",
+         title = "") +
+    theme_bw(base_size = 14) +
+  theme(axis.text.y = element_text(face = "plain", color="black", size = 5)) 
+
+table_time_ibd_SI<- CreateTableOne(vars = c("day_id1"), strata = "ibd_range", data = sols_ibd_days_plot[["data"]], 
+                                   factorVars =c("ibd_range"))
+
+print(table_time_ibd_SI,showAllLevels = TRUE,
+      nonnormal = "day_id1")
+
+peru_ibd_days_plot<- peru_ibd %>% 
+  #PE_all_samples_day_recurrence %>%
+  mutate(ibd_range = cut(estimate,  
+                         breaks = c(0, 0.25, 0.5, 0.75, 1), 
+                         include.lowest = TRUE, 
+                         labels = c("0-0.25", "0.25-0.5", "0.5-0.75", "0.75-1"))) %>%
+  #mutate(ibd_range = fct_explicit_na(ibd_range, na_level = "ND"))  %>%
+  ggplot(aes(x = day_id1, y = reorder(patientid1, estimate), color = ibd_range)) +
+  geom_point(size = 2) +
+  scale_color_brewer(palette = "Set2") +
+  #scale_color_manual(values = my_colors) + # Apply custom colors
   labs(x = "Days since first infection during study period",
        y = "Patient ID",
        color = "IBD estimate",
-       title = "Peru") +
-  theme_bw(base_size = 13)  
+       title = "") +
+  theme_bw(base_size = 14) +
+  theme(axis.text.y = element_text(face = "plain", color="black", size = 5)) 
+  
+table1(~ day_id1|ibd_range, data =peru_ibd_days_plot[["data"]])
 
+table_time_ibd_pe<- CreateTableOne(vars = c("day_id1"), strata = "ibd_range", data = peru_ibd_days_plot[["data"]], 
+                                              factorVars =c("ibd_range"))
+
+print(table_time_ibd_pe,showAllLevels = TRUE,
+      nonnormal = "day_id1")
+
+sols_ibd_boxplot_days_plot<- sols_ibd %>% 
+  mutate(ibd_range = cut(estimate,  
+                         breaks = c(0, 0.25, 0.5, 0.75, 1), 
+                         include.lowest = TRUE, 
+                         labels = c("0-0.25", "0.25-0.5", "0.5-0.75", "0.75-1"))) %>% 
+  ggplot() +
+  geom_boxplot(aes(x = ibd_range, y = day_id1,color = ibd_range),
+               width = 0.5) +
+  stat_compare_means(aes(x = ibd_range, y = day_id1), 
+                     label = "p.format", size = 3,
+                     label.x = 3.5, label.y = 150)+
+  scale_color_brewer(palette = "Set2") +
+  labs(y = "Days since baseline infection",
+       x = "IBD estimate",
+       color = "IBD estimate",
+       title = "") +
+  theme_bw(base_size = 14) + 
+  theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
+  coord_flip() 
+  
+peru_ibd_boxplot_days_plot<- peru_ibd %>% 
+  mutate(ibd_range = cut(estimate,  
+                         breaks = c(0, 0.25, 0.5, 0.75, 1), 
+                         include.lowest = TRUE, 
+                         labels = c("0-0.25", "0.25-0.5", "0.5-0.75", "0.75-1"))) %>% 
+  ggplot() +
+  geom_boxplot(aes(x = ibd_range, y = day_id1,color = ibd_range),
+               width = 0.5) +
+  stat_compare_means(aes(x = ibd_range, y = day_id1), 
+                     label = "p.format", size = 3,
+                     label.x = 4, label.y = 250)+
+  scale_color_brewer(palette = "Set2") +
+  labs(y = "Days since first infection during study period",
+       x = "IBD estimate",
+       color = "IBD estimate",
+       title = "") +
+  theme_bw(base_size = 14) +
+  theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
+  coord_flip() 
+
+ibd_plot_distribution<-ggarrange(sols_ibd_plot_distribution, peru_ibd_plot_distribution,
+                                ncol=2, nrow=1, common.legend = TRUE, legend="bottom")
+
+ibd_days_plot<-ggarrange(sols_ibd_days_plot, peru_ibd_days_plot,
+                                 ncol=2, nrow=1, common.legend = TRUE, legend="right")
+
+ibd_boxplot_days_plot<-ggarrange(sols_ibd_boxplot_days_plot, peru_ibd_boxplot_days_plot,
+                         ncol=2, nrow=1, common.legend = TRUE, legend="right")
+figure4 <- ggdraw() +
+  draw_plot(ibd_plot_distribution, x = 0.005,y = 0.75, width = .99, height = 0.245) +
+  draw_plot(ibd_days_plot, x = 0.005,y = 0.25, width = .99, height = 0.5) +
+  draw_plot(ibd_boxplot_days_plot, x = 0.005,y = 0, width = .99, height = 0.25) +
+  draw_plot_label(label = c("A", "B", "C", "D", "E", "F"), size = 14,
+                  x = c(0,0.5,0,0.5,0,0.5), y = c(1,1,0.75,0.75,0.25,0.25))
+
+print(figure4)
+
+#ggsave("figs/figure4_IBD_v2.pdf", units="cm", width=20.14, height=25.12, dpi=300)
+ggsave("figs/figure4_IBD_v2.png", units="cm", width=20.14, height=25.12, dpi=300)
+
+# Supplementary plots
+
+
+Supp_sols_ibd_days_plot<- #sols_ibd %>% 
+  SI_all_samples_day_recurrence %>%
+  mutate(ibd_range = cut(estimate,  
+                         breaks = c(0, 0.25, 0.5, 0.75, 1), 
+                         include.lowest = TRUE, 
+                         labels = c("0-0.25", "0.25-0.5", "0.5-0.75", "0.75-1"))) %>% 
+  mutate(ibd_range = fct_explicit_na(ibd_range, na_level = "ND"))  %>%
+  ggplot(aes(x = day_id1, y = reorder(patientid1, estimate), color = ibd_range)) +
+  geom_point(size = 1) +
+  #scale_color_brewer(palette = "Set2") +
+  scale_color_manual(values = my_colors) + # Apply custom colors
+  labs(x = "Days since baseline infection",
+       y = "Patient ID",
+       color = "IBD estimate",
+       title = "") +
+  theme_bw(base_size = 14) +
+  theme(axis.text.y = element_text(face = "plain", color="black", size = 5)) 
+
+
+Supp_peru_ibd_days_plot<- #peru_ibd %>% 
+  PE_all_samples_day_recurrence %>%
+  mutate(ibd_range = cut(estimate,  
+                         breaks = c(0, 0.25, 0.5, 0.75, 1), 
+                         include.lowest = TRUE, 
+                         labels = c("0-0.25", "0.25-0.5", "0.5-0.75", "0.75-1"))) %>%
+  mutate(ibd_range = fct_explicit_na(ibd_range, na_level = "ND"))  %>%
+  ggplot(aes(x = day_id1, y = reorder(patientid1, estimate), color = ibd_range)) +
+  geom_point(size = 1) +
+  #scale_color_brewer(palette = "Set2") +
+  scale_color_manual(values = my_colors) + # Apply custom colors
+  labs(x = "Days since first infection during study period",
+       y = "Patient ID",
+       color = "IBD estimate",
+       title = "") +
+  theme_bw(base_size = 14) +
+  theme(axis.text.y = element_text(face = "plain", color="black", size = 5)) 
+
+supp_ibd_days_plot<-ggarrange(Supp_sols_ibd_days_plot, Supp_peru_ibd_days_plot,
+                         ncol=2, nrow=1, common.legend = TRUE, legend="right")
+
+Supp_fig_ibd_days <- ggdraw() +
+  draw_plot(supp_ibd_days_plot, x = 0.005,y = 0, width = .99, height = 0.95) +
+  draw_plot_label(label = c("A", "B"), size = 14,
+                  x = c(0,0.5), y = c(1,1))
+
+print(Supp_fig_ibd_days)
+
+#ggsave("figs/figure4_IBD_v2.pdf", units="cm", width=20.14, height=25.12, dpi=300)
+ggsave("figs/Supp_fig_ibd_days.png", units="cm", width=20.14, height=25.12, dpi=300)
 
 # Proportions -------------------------------------------------------------
 
