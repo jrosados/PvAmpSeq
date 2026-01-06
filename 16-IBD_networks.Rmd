@@ -1,0 +1,847 @@
+---
+title: "Dcifer IBD estimates"
+author: "Shazia Ruybal-Pesántez"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide 
+    code_download: true
+    fig_width: 8
+    fig_height: 6
+    theme: cosmo
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, 
+                      warning = FALSE, 
+                      message = FALSE, 
+                      tidy = TRUE,
+                      fig.width = 8, 
+                      fig.height = 6)
+                      # fig.path = here::here("figures/"),
+                      # dev = "png",
+                      # dpi = 300)
+
+library(tidyverse)
+library(here)
+library(dcifer)
+library(viridis)
+library(tidygraph) # for creating graph object
+library(ggraph) # for plotting network
+library(janitor)
+library(ggpubr)
+library(cowplot)
+
+```
+
+```{r}
+
+# Load data ---------------------------------------------------------------
+load("intermediate_data/Dcifer_IBD.RData")
+# sols_all_meta <- readRDS(here("intermediate_data", "sols_all_meta.rds"))
+# peru_all_meta <- readRDS(here("intermediate_data", "peru_all_meta.rds"))
+# sols_sig_meta <- readRDS(here("intermediate_data", "sols_sig_meta.rds")) 
+# peru_sig_meta <- readRDS(here("intermediate_data", "peru_sig_meta.rds"))
+
+
+```
+
+
+
+## Relatedness networks (using `r^`)
+
+### Solomon Islands
+We create nodes and edges data frames so we can create the network object. The `id` variable links both together. The nodes can contain any metadata relevant to our analysis, here we explore whether timepoint (D0 vs follow-up), paired/non-paired, treatment arm may explain relatedness patterns. 
+```{r}
+
+sols_nodes <- sols_data %>% 
+                select(sample, redcap_event_name, trt_label, mean_moi, max_moi, episodes, vis_date
+                       ) %>%
+                distinct() %>% 
+                mutate(patient_id = substr(sample, 4, 6),
+                       id = 1:n()) 
+
+#sols_edges <- sols_ibd %>% left_join(sols_nodes %>% select(sample, id), by = c("sampleid1" = "sample")) %>% rename(id.x = id)
+
+#sols_edges <- sols_edges %>% left_join(sols_nodes %>% select(sample, id), by = c("sampleid2" = "sample")) %>% rename(id.y = id)
+sols_tidy <- tbl_graph(nodes = sols_nodes, edges = sols_edges, directed = T)
+```
+
+#### Below we plot relatedness (`r^`) of all sample pairs in Solomon Islands using a threshold of ≥0.90. Nodes are annotated with the patientID (in some instances paired samples from the same participant cluster together, eg 081). 
+```{r}
+sols_tidy %>% activate(edges) %>% 
+  filter(p_value < alpha) %>% 
+  filter(estimate >= 0.90) %>% 
+  ggraph(layout = "fr") + 
+  geom_edge_link(color = "darkgrey", alpha = 0.5) + 
+  geom_node_point(aes(fill = patient_id), shape = 21, color = "black", size = 4) +
+  geom_node_text(aes(label = sample), repel = TRUE, size=2) +
+  labs(edge_width = "sample",
+       fill = "",
+       title = "Sols all infections r^ ≥0.9") +
+  theme_graph() + theme(legend.position = "none")
+```
+
+#### Below we restrict our network only to infections on D0 to examine overall relatedness (`r^`) of baseline samples in Solomon Islands using a threshold of ≥0.90. Nodes are annotated with the patientID and there are 11 clusters (sample membership range n=2 to 5). The rest are "singleton" clusters.
+```{r}
+sols_tidy %>% 
+  activate(nodes) %>% 
+  filter(redcap_event_name == "enrollment_arm_1") %>% 
+#  filter(infoD == "0") %>% 
+  activate(edges) %>% 
+  filter(p_value < alpha) %>% 
+  filter(estimate >= 0.9) %>% 
+  ggraph(layout = "fr") + 
+  geom_edge_link(color = "darkgrey", alpha = 0.5) + 
+  geom_node_point(aes(fill = patient_id), shape = 21, color = "black", size = 4) +
+  geom_node_text(aes(label = patient_id), repel = TRUE, size=3) +
+  labs(edge_width = "sample",
+       fill = "",
+       title = "Sols D0 infections r^ ≥0.9") +
+  theme_graph() + theme(legend.position = "none")
+```
+
+### Peru
+We create nodes and edges data frames so we can create the network object. The `id` variable links both together. The nodes can contain any metadata relevant to our analysis, here we explore whether timepoint (1st vs recurrent infection), paired/non-paired, same home vs different home, may explain relatedness patterns. 
+```{r}
+# peru_nodes <- peru_data %>% 
+#                 select(sample_id, patient_id = PatientName, mean_moi, max_moi, episodes, home_id, date, mm_aa, GPS_N, GPS_E) %>%
+#                 distinct() %>% 
+#                 mutate(id = 1:n(),
+#                        date = as.Date(date, "%m/%d/%Y")) %>% 
+#                 # group by patient ID here so we can create an infection_number variable
+#                 group_by(patient_id) %>% 
+#                 mutate(infection_num = rank(date)) %>% 
+#                 ungroup()
+#       
+# 
+# peru_edges <- peru_ibd %>% left_join(peru_nodes %>% select(sample_id, id), by = c("sampleid1" = "sample_id")) %>% rename(id.x = id)
+# 
+# peru_edges <- peru_edges %>% left_join(peru_nodes %>% select(sample_id, id), by = c("sampleid2" = "sample_id")) %>% rename(id.y = id)
+
+peru_tidy <- tbl_graph(nodes = peru_nodes, edges = peru_edges, directed = T)
+```
+
+#### Below we plot relatedness (`r^`) of all sample pairs in Peru using a threshold of ≥0.90. Nodes are annotated with the patientID. There is one large cluster containing a large number of samples that cluster at ≥0.90 IBD.
+```{r}
+peru_tidy %>% activate(edges) %>% 
+  filter(p_value < alpha) %>% 
+  filter(estimate >= 0.9) %>% 
+  ggraph(layout = "fr") + 
+  geom_edge_link(color = "darkgrey", alpha = 0.5) + 
+  geom_node_point(aes(fill = patient_id), shape = 21, color = "black", size = 4) +
+  geom_node_text(aes(label = patient_id), repel = TRUE, size=2) +
+  labs(edge_width = "sample",
+       fill = "",
+       title = "Peru all infections r^ ≥0.9") +
+  theme_graph() + theme(legend.position = "none")
+```
+
+#### Below we restrict our network only to the 1st infection for each individual to examine overall relatedness (`r^`) without paired samples as a potential confounder using a threshold of ≥0.90. Nodes are annotated with the homeID to explore whether there are any spatial patterns/household clustering. There is no obvious clustering by household, and we still observe a large cluster of highly related (essentially clonal) samples. 
+```{r}
+peru_tidy %>% 
+  activate(nodes) %>% 
+  filter(infection_num == 1) %>% 
+  activate(edges) %>% 
+  filter(p_value < alpha) %>% 
+  filter(estimate >= 0.90) %>% 
+  ggraph(layout = "fr") + 
+  geom_edge_link(color = "darkgrey", alpha = 0.5) + 
+  geom_node_point(aes(fill = patient_id), shape = 21, color = "black", size = 4) +
+  geom_node_text(aes(label = patient_id), repel = TRUE, size = 2) +
+  labs(edge_width = "sample",
+       fill = "",
+       title = "Peru 1st infections r^ ≥0.9") +
+  theme_graph() + theme(legend.position = "none")
+```
+
+
+```{r}
+peru_tidy %>% 
+  activate(nodes) %>% 
+  mutate(community= if_else(str_detect(sample_id, "^AL"), "AL", "AC")) %>%
+  #filter(sig_est == "significant") %>%
+  activate(edges) %>% 
+    #filter(p_value < alpha) %>% 
+  filter(p_value < alpha) %>% 
+  mutate(time_block = case_when(
+    date1 <= as.Date("2015-05-31") & date2 <= as.Date("2015-05-31") ~ "Period A: Dic 2014 - May 2015",
+    date1 >= as.Date("2015-06-01") & date2 >= as.Date("2015-06-01") ~ "Period B: Jun 2015 - Dic 2015",
+    TRUE ~ "Outside Range"
+  )) %>%
+  filter(estimate >= 0.75) %>% 
+  filter(time_block == "Period A: Dic 2014 - May 2015") %>% 
+  ggraph(layout = "fr") + 
+  geom_edge_link(color = "darkgrey", alpha = 0.5) + 
+  geom_node_point(aes(fill = community), shape = 21, color = "black", size = 4) +
+  geom_node_text(aes(label = patient_id), repel = TRUE, size = 2) +
+  labs(edge_width = "sample",
+       fill = "",
+       title = "Peru high transmission season r^ ≥0.75") +
+  theme_graph() + theme(legend.position = "bottom") +
+  facet_graph(~community)
+
+
+
+peru_tidy %>% 
+  activate(nodes) %>% 
+  mutate(community= if_else(str_detect(sample_id, "^AL"), "LUPUNA", "CAHUIDE")) %>%
+  #filter(sig_est == "significant") %>%
+  activate(edges) %>% 
+    #filter(p_value < alpha) %>% 
+  filter(p_value < alpha) %>% 
+  mutate(time_block = case_when(
+    date1 <= as.Date("2015-05-31") & date2 <= as.Date("2015-05-31") ~ "Period A: Dic 2014 - May 2015",
+    date1 >= as.Date("2015-06-01") & date2 >= as.Date("2015-06-01") ~ "Period B: Jun 2015 - Dic 2015",
+    TRUE ~ "Outside Range"
+  )) %>%
+  filter(estimate >= 0.75) %>% 
+  filter(time_block == "Period B: Jun 2015 - Dic 2015") %>% 
+  ggraph(layout = "fr") + 
+  geom_edge_link(color = "darkgrey", alpha = 0.5) + 
+  geom_node_point(aes(fill = community), shape = 21, color = "black", size = 4) +
+  geom_node_text(aes(label = patient_id), repel = TRUE, size = 2) +
+  labs(edge_width = "sample",
+       fill = "",
+       title = "Peru low transmission season r^ ≥0.75") +
+  theme_graph() + theme(legend.position = "bottom") +
+  facet_graph(~community)
+
+
+peru_tidy %>% 
+  activate(nodes) %>% 
+  mutate(community= if_else(str_detect(sample_id, "^AL"), "LUPUNA", "CAHUIDE")) %>%
+  #filter(max_moi == "1") %>%
+  mutate(
+    season = case_when(
+    date <= as.Date("2015-05-31") ~ "Period A: Dic 2014 - May 2015",
+    date >= as.Date("2015-06-01") & date <= as.Date("2015-10-31") ~ "Period B: Jun 2015 - Oct 2015",
+    date >= as.Date("2015-11-01") ~ "Period C: Nov 2015 - Dic 2015",
+    TRUE ~ "Outside Range"
+  )) %>%
+mutate(
+    month_inf = case_when(
+    date <= as.Date("2015-01-31") ~ "Dic_14-Jan_15",
+    date >= as.Date("2015-02-01") & date <= as.Date("2015-03-31") ~ "Feb-Mar_15",
+    date >= as.Date("2015-04-01") & date <= as.Date("2015-05-31") ~ "Abr-May_15",
+    date >= as.Date("2015-06-01") & date <= as.Date("2015-07-31") ~ "Jun-Jul_15",
+    date >= as.Date("2015-08-01") & date <= as.Date("2015-09-30") ~ "Aug-Sep_15",
+    date >= as.Date("2015-10-01") & date <= as.Date("2015-11-30") ~ "Oct-Nov_15",
+    date >= as.Date("2015-12-01") ~ "Dic_15",
+    TRUE ~ "Outside Range"
+  )) %>%
+  activate(edges) %>% 
+  filter(p_value < alpha) %>% 
+  mutate(
+    time_block = case_when(
+    date1 <= as.Date("2015-05-31") & date2 <= as.Date("2015-05-31") ~ "Period A: Nov 2014 - May 2015",
+    date1 >= as.Date("2015-06-01") & date2 >= as.Date("2015-06-01") ~ "Period B: Jun 2015 - Oct 2015",
+    TRUE ~ "Outside Range"
+  )) %>%
+  filter(estimate >= 0.5) %>% 
+  #filter(time_block == "Outside Range") %>% 
+  ggraph(layout = "fr") + 
+  geom_edge_link(color = "darkgrey", alpha = 0.5) + 
+  geom_node_point(aes(fill = season), shape = 21, color = "black", size = 4) +
+  geom_node_text(aes(label = patient_id), repel = TRUE, size = 2) +
+  labs(edge_width = "sample",
+       fill = "",
+       title = "Peru cross-season r^ ≥0.50") +
+  theme_graph() + theme(legend.position = "bottom") +
+  facet_graph(~community)
+
+
+
+
+
+
+
+```
+```{r}
+#---------------------------------
+Sols_MOI1_IBD_0.9<- sols_tidy %>% 
+   mutate(date = as.Date(vis_date, format = "%m/%d/%Y")) %>%
+  mutate(
+    season = case_when(
+    date <= as.Date("2017-12-31") ~ "A: LT Sep 2017 - Dic 2017",
+    date >= as.Date("2018-01-01") & date <= as.Date("2018-06-30") ~ "B: HT Jan 2018 - Jun 2018",
+    date >= as.Date("2018-07-01") & date <= as.Date("2018-12-31") ~ "C: LT Jul 2018 - Dic 2018",
+    date >= as.Date("2019-01-01") & date <= as.Date("2019-08-31") ~ "D: HT Jan 2019 - Aug 2019",
+    TRUE ~ "Outside Range" ))   %>%
+filter(max_moi == "1") %>%
+activate(edges) %>% 
+  filter(p_value < alpha) %>% 
+  filter(estimate >= 0.90) %>% 
+  ggraph(layout = "fr") + 
+  geom_edge_link(color = "darkgrey", alpha = 0.5) + 
+  geom_node_point(aes(fill = season), shape = 21, color = "black", size = 4) +
+  geom_node_text(aes(label = sample), repel = TRUE, size=2) +
+  labs(edge_width = "sample",
+       fill = "",
+       title = "Solomon Islands r^ ≥0.9 MOI = 1") +
+  theme_graph() + theme(legend.position = "bottom")
+
+ggsave("figs/SI_MOI1_IBD_0.9v2.pdf", plot = Sols_MOI1_IBD_0.9, device = cairo_pdf)
+
+
+Peru_MOI1_IBD_0.9 <- peru_tidy %>% 
+  activate(nodes) %>% 
+  mutate(community= if_else(str_detect(sample_id, "^AL"), "LUPUNA", "CAHUIDE")) %>%
+  filter(max_moi == "1") %>%
+  mutate(
+     season = case_when(
+    date <= as.Date("2015-05-31") ~ "A: HT Dic 2014 - May 2015",
+    date >= as.Date("2015-06-01") & date <= as.Date("2015-10-31") ~ "B: LT Jun 2015 - Oct 2015",
+    date >= as.Date("2015-11-01") ~ "C: HT Nov 2015 - Dic 2015",
+    TRUE ~ "Outside Range"
+  )) %>%
+mutate(
+    month_inf = case_when(
+    date <= as.Date("2015-01-31") ~ "Dic_14-Jan_15",
+    date >= as.Date("2015-02-01") & date <= as.Date("2015-03-31") ~ "Feb-Mar_15",
+    date >= as.Date("2015-04-01") & date <= as.Date("2015-05-31") ~ "Abr-May_15",
+    date >= as.Date("2015-06-01") & date <= as.Date("2015-07-31") ~ "Jun-Jul_15",
+    date >= as.Date("2015-08-01") & date <= as.Date("2015-09-30") ~ "Aug-Sep_15",
+    date >= as.Date("2015-10-01") & date <= as.Date("2015-11-30") ~ "Oct-Nov_15",
+    date >= as.Date("2015-12-01") ~ "Dic_15",
+    TRUE ~ "Outside Range"
+  )) %>%
+  activate(edges) %>% 
+  filter(p_value < alpha) %>% 
+  mutate(
+    time_block = case_when(
+    date1 <= as.Date("2015-05-31") & date2 <= as.Date("2015-05-31") ~ "Period A: Nov 2014 - May 2015",
+    date1 >= as.Date("2015-06-01") & date2 >= as.Date("2015-06-01") ~ "Period B: Jun 2015 - Oct 2015",
+    TRUE ~ "Outside Range"
+  )) %>%
+  filter(estimate >= 0.9) %>% 
+  #filter(time_block == "Outside Range") %>% 
+  ggraph(layout = "fr") + 
+  geom_edge_link(color = "darkgrey", alpha = 0.5) + 
+  geom_node_point(aes(fill = season), shape = 21, color = "black", size = 4) +
+  geom_node_text(aes(label = patient_id), repel = TRUE, size = 2,family = "sans") +
+  labs(edge_width = "sample",
+       fill = "",
+       title = "Peru r^ ≥0.9 MOI = 1") +
+  theme_graph() + theme(legend.position = "bottom") +
+  facet_graph(~community)
+
+ggsave("figs/Peru_MOI1_IBD_0.9.pdf", plot = Peru_MOI1_IBD_0.9, device = cairo_pdf)
+
+#-----------------------------
+
+# Sols_IBD_0.9<- sols_tidy %>% 
+# #filter(max_moi == "1") %>%
+# activate(edges) %>% 
+#   filter(p_value < alpha) %>% 
+#   filter(estimate >= 0.90) %>% 
+#   ggraph(layout = "fr") + 
+#   geom_edge_link(color = "darkgrey", alpha = 0.5) + 
+#   geom_node_point(aes(fill = trt_label), shape = 21, color = "black", size = 4) +
+#   geom_node_text(aes(label = sample), repel = TRUE, size=2) +
+#   labs(edge_width = "sample",
+#        fill = "",
+#        title = "Solomon Islands r^ ≥0.9 MOI >= 1") +
+#   theme_graph() + theme(legend.position = "bottom")
+
+
+Sols_IBD_0.9<- sols_tidy %>% 
+   mutate(date = as.Date(vis_date, format = "%m/%d/%Y")) %>%
+  mutate(
+    season = case_when(
+    date <= as.Date("2017-12-31") ~ "A: LT Sep 2017 - Dic 2017",
+    date >= as.Date("2018-01-01") & date <= as.Date("2018-06-30") ~ "B: HT Jan 2018 - Jun 2018",
+    date >= as.Date("2018-07-01") & date <= as.Date("2018-12-31") ~ "C: LT Jul 2018 - Dic 2018",
+    date >= as.Date("2019-01-01") & date <= as.Date("2019-08-31") ~ "D: HT Jan 2019 - Aug 2019",
+    TRUE ~ "Outside Range" ))   %>%
+#filter(max_moi == "1") %>%
+activate(edges) %>% 
+  filter(p_value < alpha) %>% 
+  filter(estimate >= 0.90) %>% 
+  ggraph(layout = "fr") + 
+  geom_edge_link(color = "darkgrey", alpha = 0.5) + 
+  geom_node_point(aes(fill = season), shape = 21, color = "black", size = 4) +
+  geom_node_text(aes(label = sample), repel = TRUE, size=2) +
+  labs(edge_width = "sample",
+       fill = "",
+       title = "Solomon Islands r^ ≥0.9 MOI >= 1") +
+  theme_graph() + theme(legend.position = "bottom")
+
+ggsave("figs/SI_IBD_0.9v2.pdf", plot = Sols_IBD_0.9, device = cairo_pdf)
+
+
+Peru_IBD_0.9<- peru_tidy %>% 
+  activate(nodes) %>% 
+  mutate(community= if_else(str_detect(sample_id, "^AL"), "LUPUNA", "CAHUIDE")) %>%
+  #filter(max_moi == "1") %>%
+  mutate(
+    season = case_when(
+    date <= as.Date("2015-05-31") ~ "A: HT Dic 2014 - May 2015",
+    date >= as.Date("2015-06-01") & date <= as.Date("2015-10-31") ~ "B: LT Jun 2015 - Oct 2015",
+    date >= as.Date("2015-11-01") ~ "C: HT Nov 2015 - Dic 2015",
+    TRUE ~ "Outside Range"
+  )) %>%
+mutate(
+    month_inf = case_when(
+    date <= as.Date("2015-01-31") ~ "Dic_14-Jan_15",
+    date >= as.Date("2015-02-01") & date <= as.Date("2015-03-31") ~ "Feb-Mar_15",
+    date >= as.Date("2015-04-01") & date <= as.Date("2015-05-31") ~ "Abr-May_15",
+    date >= as.Date("2015-06-01") & date <= as.Date("2015-07-31") ~ "Jun-Jul_15",
+    date >= as.Date("2015-08-01") & date <= as.Date("2015-09-30") ~ "Aug-Sep_15",
+    date >= as.Date("2015-10-01") & date <= as.Date("2015-11-30") ~ "Oct-Nov_15",
+    date >= as.Date("2015-12-01") ~ "Dic_15",
+    TRUE ~ "Outside Range"
+  )) %>%
+  activate(edges) %>% 
+  filter(p_value < alpha) %>% 
+  mutate(
+    time_block = case_when(
+    date1 <= as.Date("2015-05-31") & date2 <= as.Date("2015-05-31") ~ "Period A: Nov 2014 - May 2015",
+    date1 >= as.Date("2015-06-01") & date2 >= as.Date("2015-06-01") ~ "Period B: Jun 2015 - Oct 2015",
+    TRUE ~ "Outside Range"
+  )) %>%
+  filter(estimate >= 0.9) %>% 
+  #filter(time_block == "Outside Range") %>% 
+  ggraph(layout = "fr") + 
+  geom_edge_link(color = "darkgrey", alpha = 0.5) + 
+  geom_node_point(aes(fill = season), shape = 21, color = "black", size = 4) +
+  geom_node_text(aes(label = patient_id), repel = TRUE, size = 2) +
+  labs(edge_width = "sample",
+       fill = "",
+       title = "Peru r^ ≥0.9 MOI >= 1") +
+  theme_graph() + theme(legend.position = "bottom") +
+  facet_graph(~community)
+
+ggsave("figs/PE_IBD_0.9.pdf", plot = Peru_IBD_0.9, device = cairo_pdf)
+
+```
+
+
+
+## Thoughts on estimating `r^ total`
+Here it is important to note that one of the "defining assumptions" of the IBD estimation approach in `dcifer` is an assumption of no intra-host relatedness. In `dcifer` `r^total` is calculated by allowing multiple pairs of strains to be related between two infections (`M'`>1), such that the number of positively related strain pairs is also calculated (`M'`). `r^total` can be calculated using two methods:
+
+1. *model without constraint:* assuming strains are not equal to each other r1!=...!=rn , this is denoted with the `equalr=FALSE` argument. **I believe this is the most appropriate for our purposes.**
+2. *model with constraint:* assuming strains are equal to each other r1=...=rn, this is denoted with the `equalr=TRUE` argument.
+
+As described by [Gerlovina et al 2022](https://doi.org/10.1093/genetics/iyac126), `r^total` is a more informative metric as it describes total relatedness in the case of MOI>1. I am not fully convinced that `r^total` and the calculation approach is appropriate for *Pv* infections, where relapses are by definition genetically related to the parent infection (ie intra-host relatedness cannot be assumed to be null). However, in their paper, [Gerlovina et al 2022](https://doi.org/10.1093/genetics/iyac126) explore what happens when this assumption is violated (eg strains within an infection are siblings, r=0.5) and show that for various scenarios there doesn't seem to be any significant bias introduced (see Supplementary File 1, Figs 10-12 etc). This is also the only current method that deals with MOI>1 for IBD estimations, so this is our next best option, but still need to fully convince myself that this is OK (and appropriate) for vivax data. 
+
+## Solomon Islands IBD `r^ total`
+```{r eval=F}
+sols_nodes %>% tabyl(max_moi)
+1-0.197
+```
+Based on MOI estimated by our AmpSeq panel data, we expect approximately 80% of samples to be MOI>1 (max MOI=4) and based on naive COI estimations here, we expect approximately 60% of samples to be MOI>1 (maxMOI=4). Therefore we calculate `r^total` to account for MOI and the possibility of multiple strains being related between complex infections. 
+
+We create a grid of `r^` values to permute over.
+```{r}
+revals <- mapply(generateReval, 1:5, nr = c(1e3, 1e2, 32, 16, 12))
+```
+
+We calculate `r^total` using the two methods. Results will have either 1 or 2 appended, respectively. 
+
+1. *model without constraint:* assuming strains are not equal to each other r1!=...!=rn , this is denoted with the `equalr=FALSE` argument. **I believe this is the most appropriate for our purposes.**
+2. *model with constraint:* assuming strains are equal to each other r1=...=rn, this is denoted with the `equalr=TRUE` argument.
+```{r}
+sig1 <- sig2 <- vector("list", nrow(isig))
+for (i in 1:nrow(isig)) {
+  sig1[[i]] <- ibdEstM(dsmp[isig[i, ]], coi[isig[i, ]], afreq, Mmax = 5, 
+                       equalr = FALSE, reval = revals)
+}
+for (i in 1:nrow(isig)) {
+  sig2[[i]] <- ibdEstM(dsmp[isig[i, ]], coi[isig[i, ]], afreq, equalr = TRUE)
+}
+M1      <- sapply(sig1, function(r) sum(r > 0))  
+M2      <- sapply(sig2, length)          
+rtotal1 <- sapply(sig1, sum)    
+rtotal2 <- sapply(sig2, sum)    
+```
+
+We check the overall correlation of estimated `M` based on both methods:
+```{r}
+cor(M1, M2)         
+```
+
+We check the overall correlation of estimated `r^total` based on both methods:
+```{r}
+cor(rtotal1, rtotal2) 
+```
+
+Now we create a list of the significant pairs: 
+```{r}
+samples <- names(dsmp)
+sig <- as.data.frame(isig, row.names = FALSE)
+sig[c("sampleid1", "sampleid2")]         <- list(samples[isig[, 1]], samples[isig[, 2]])
+sig[c("M1", "M2")]           <- list(M1, M2)
+sig[c("rtotal1", "rtotal2")] <- list(round(rtotal1, 3), round(rtotal2, 3))
+
+# head(sig)
+```
+There are `r nrow(sig)` significant pairwise comparisons, with `r^total` ranging from `r sig %>% summarise(min(rtotal1)) %>% as.numeric()` to `r sig %>% summarise(max(rtotal1)) %>% as.numeric()` (mean= `r sig %>% summarise(mean(rtotal1)) %>% as.numeric()`; median= `r sig %>% summarise(median(rtotal1)) %>% as.numeric()`). There are `r sig %>% filter(rtotal1>1) %>% nrow()` significant pairwise comparisons with `r^total`>1. 
+
+
+For downstream analyses we will use the results from method 1 (ie no constraint).
+```{r}
+# This code check one sample pair as per vignette
+# 
+# i <- 18                              
+# pair <- dsmp[isig[i, ]]
+# coii <-  coi[isig[i, ]]
+# 
+# res1 <- ibdPair(pair, coii, afreq, M = M1[i], pval = TRUE, equalr = FALSE,  
+#                 reval = revals[[M1[i]]])
+# res2 <- ibdPair(pair, coii, afreq, M = M2[i], pval = TRUE, equalr = TRUE,  
+#                 confreg = TRUE, llik = TRUE, reval = revals[[1]])
+# 
+
+# estimate with equalr = FALSE
+# res1$rhat          
+
+# estimate with equalr = TRUE
+# rep(res2$rhat, M2[i]) 
+```
+
+```{r}
+# From vignette and pertaining to method 2:
+# CI     <- range(res2$confreg)
+# llikCI <- max(res2$llik) - qchisq(1 - alpha, df = 1)/2
+# llrng  <- range(res2$llik[is.finite(res2$llik)])
+# yCI <- llrng + diff(llrng)*0.25
+# yLR <- (res2$llik[1] + max(res2$llik))/2
+# cols <- c("purple", "cadetblue3", "gray60")
+# 
+# par(mar = c(3, 2.5, 2, 0.1), mgp = c(1.5, 0.3, 0))
+# plot(revals[[1]], res2$llik, type = "l", xlab = "r", ylab = "log-likelihood", 
+#      yaxt = "n")#, tck = -0.01)
+# abline(v = res2$rhat, lty = 1, col = cols[1])
+# abline(h = c(max(res2$llik), llikCI, res2$llik[[1]]), lty = 2, col = cols[2])
+# abline(v = CI, col = cols[1], lty = 5)
+# arrows(CI[1], yCI, CI[2], yCI, angle = 20, length = 0.1, code = 3, 
+#        col = cols[3])
+# arrows(0.15, res2$llik[1], 0.15, max(res2$llik), angle = 20, length = 0.1, 
+#        code = 3, col = cols[3])
+# text(0.165, yLR, adj = 0, "0.5 LR statistic", col = cols[3])
+# text(mean(CI), yCI + 0.05*diff(llrng), "confidence interval", col = cols[3])
+# text(res2$rhat - 0.025, yLR, "MLE", col = cols[3], srt = 90)
+```
+
+## Peru IBD `r^ total`
+```{r eval=F}
+peru_nodes %>% tabyl(max_moi)
+1-0.15
+```
+Based on MOI estimated by our AmpSeq panel data, we expect approximately 85% of samples to be MOI>1 (max MOI=5) and based on naive COI estimations here, we expect approximately 61% of samples to be MOI>1 (max MOI=3). Therefore we calculate `r^total` to account for MOI and the possibility of multiple strains being related between complex infections.
+
+We created a grid of `r^` values to permute over above (`revals`), which we will use below.
+```{r}
+# revals <- mapply(generateReval, 1:5, nr = c(1e3, 1e2, 32, 16, 12))
+```
+
+We calculate `r^total` using the two methods. Results will have either 1 or 2 appended, respectively.
+
+- *model without constraint:* assuming strains are not equal to each other r1!=…!=rn , this is denoted with the `equalr=FALSE` argument. **I believe this is the most appropriate for our purposes.**
+- *model with constraint:* assuming strains are equal to each other r1=…=rn, this is denoted with the `equalr=TRUE` argument.
+```{r}
+sig1_pe <- sig2_pe <- vector("list", nrow(isig_pe))
+for (i in 1:nrow(isig_pe)) {
+  sig1_pe[[i]] <- ibdEstM(dsmp_pe[isig_pe[i, ]], coi_pe[isig_pe[i, ]], afreq_pe, Mmax = 5, 
+                       equalr = FALSE, reval = revals)
+}
+for (i in 1:nrow(isig_pe)) {
+  sig2_pe[[i]] <- ibdEstM(dsmp_pe[isig_pe[i, ]], coi_pe[isig_pe[i, ]], afreq_pe, equalr = TRUE)
+}
+M1_pe      <- sapply(sig1_pe, function(r) sum(r > 0))  
+M2_pe      <- sapply(sig2_pe, length)          
+rtotal1_pe <- sapply(sig1_pe, sum)    
+rtotal2_pe <- sapply(sig2_pe, sum)    
+```
+
+We check the overall correlation of estimated `M` based on both methods:
+```{r}
+cor(M1_pe, M2_pe)         
+```
+
+We check the overall correlation of estimated `r^total` based on both methods:
+```{r}
+cor(rtotal1_pe, rtotal2_pe) 
+```
+
+Now we create a list of the significant pairs:
+```{r}
+samples_pe <- names(dsmp_pe)
+sig_pe <- as.data.frame(isig_pe, row.names = FALSE)
+sig_pe[c("sampleid1", "sampleid2")]         <- list(samples_pe[isig_pe[, 1]], samples_pe[isig_pe[, 2]])
+sig_pe[c("M1", "M2")]           <- list(M1_pe, M2_pe)
+sig_pe[c("rtotal1", "rtotal2")] <- list(round(rtotal1_pe, 3), round(rtotal2_pe, 3))
+
+# head(sig_pe)
+```
+There are `r nrow(sig_pe)` significant pairwise comparisons, with `r^total` ranging from `r sig_pe %>% summarise(min(rtotal1)) %>% as.numeric()` to `r sig_pe %>% summarise(max(rtotal1)) %>% as.numeric()` (mean= `r sig_pe %>% summarise(mean(rtotal1)) %>% as.numeric()`; median= `r sig_pe %>% summarise(median(rtotal1)) %>% as.numeric()`). There are `r sig_pe %>% filter(rtotal1>1) %>% nrow()` significant pairwise comparisons with `r^total`>1. 
+
+For downstream analyses we will use the results from method 1 (ie no constraint).
+```{r}
+# This code check one sample pair as per vignette
+# 
+# i <- 18                              
+# pair_pe <- dsmp_pe[isig_pe[i, ]]
+# coii_pe <-  coi_pe[isig_pe[i, ]]
+# 
+# res1_pe <- ibdPair(pair_pe, coii_pe, afreq_pe, M = M1_pe[i], pval = TRUE, equalr = FALSE,  
+#                 reval = revals[[M1[i]]])
+# res2_pe <- ibdPair(pair_pe, coii_pe, afreq_pe, M = M2_pe[i], pval = TRUE, equalr = TRUE,  
+#                 confreg = TRUE, llik = TRUE, reval = revals[[1]])
+# 
+# estimate with equalr = FALSE
+# res1_pe$rhat           
+
+# estimate with equalr = TRUE
+# rep(res2_pe$rhat, M2[i])   
+```
+
+```{r}
+# From vignette and pertaining to method 2:
+# 
+# CI     <- range(res2_pe$confreg)
+# llikCI <- max(res2_pe$llik) - qchisq(1 - alpha, df = 1)/2
+# llrng  <- range(res2_pe$llik[is.finite(res2_pe$llik)])
+# yCI <- llrng + diff(llrng)*0.25
+# yLR <- (res2_pe$llik[1] + max(res2_pe$llik))/2
+# cols <- c("purple", "cadetblue3", "gray60")
+# 
+# par(mar = c(3, 2.5, 2, 0.1), mgp = c(1.5, 0.3, 0))
+# plot(revals[[1]], res2_pe$llik, type = "l", xlab = "r", ylab = "log-likelihood", 
+#      yaxt = "n")#, tck = -0.01)
+# abline(v = res2_pe$rhat, lty = 1, col = cols[1])
+# abline(h = c(max(res2_pe$llik), llikCI, res2_pe$llik[[1]]), lty = 2, col = cols[2])
+# abline(v = CI, col = cols[1], lty = 5)
+# arrows(CI[1], yCI, CI[2], yCI, angle = 20, length = 0.1, code = 3, 
+#        col = cols[3])
+# arrows(0.15, res2_pe$llik[1], 0.15, max(res2_pe$llik), angle = 20, length = 0.1, 
+#        code = 3, col = cols[3])
+# text(0.165, yLR, adj = 0, "0.5 LR statistic", col = cols[3])
+# text(mean(CI), yCI + 0.05*diff(llrng), "confidence interval", col = cols[3])
+# text(res2_pe$rhat - 0.025, yLR, "MLE", col = cols[3], srt = 90)
+```
+
+## Relatedness networks (using `r^total`)
+
+### Solomon Islands
+We create nodes and edges data frames as per above, but using `r^total` estimates.
+```{r}
+# note sols_nodes created above in first relatedness network section
+
+sols_edges_sig <- sig %>% left_join(sols_nodes %>% select(sample, id), by = c("sampleid1" = "sample")) %>% rename(id.x = id)
+
+sols_edges_sig <- sols_edges_sig %>% left_join(sols_nodes %>% select(sample, id), by = c("sampleid2" = "sample")) %>% rename(id.y = id)
+
+sols_tidy_sig <- tbl_graph(nodes = sols_nodes, edges = sols_edges_sig, directed = T)
+```
+
+#### Below we plot relatedness (`r^total`) of all sample pairs in Solomon Islands using a threshold of ≥0.90. Nodes are annotated with the patientID. 
+```{r}
+sols_tidy_sig %>%  
+  activate(nodes) %>%
+  #filter(max_moi == 1) %>% 
+  activate(edges) %>%
+  filter(rtotal1 >= 0.9) %>% 
+  ggraph(layout = "fr") + 
+  geom_edge_link(color = "darkgrey", alpha = 0.5) + 
+  geom_node_point(aes(fill = trt_label), shape = 21, color = "black", size = 4) +
+  geom_node_text(aes(label = sample), repel = TRUE, size=2) +
+  labs(edge_width = "sample",
+       fill = "",
+       title = "Sols all infections r^total≥0.9 MOI = 1") +
+  theme_graph() + theme(legend.position = "bottom")
+```
+
+#### Below we plot the same network but we color each node by the sampling day to see if there are any patterns in those participants that had recurrent infections after treatment on D0. In some instances recurrent infections were unrelated to the "parent" infection on D0 (eg samples from participant 024 cluster with many other samples, but not with each other nor the D0 sample).
+```{r}
+network_SI_five_episodes<- sols_tidy_sig %>% 
+  filter(episodes>=5) %>%
+  #filtering samples with more than 2 episodes
+  activate(edges) %>% 
+  filter(rtotal1 >= 0.9) %>% 
+  ggraph(layout = "fr") + 
+  geom_edge_link(color = "darkgrey", alpha = 0.5) + 
+#  geom_node_point(aes(fill = as.factor(infoD)), shape = 21, color = "black", size = 4) +
+    geom_node_point(aes(fill = trt_label), shape = 21, color = "black", size = 4) +
+  geom_node_text(aes(label = patient_id), repel = TRUE, size=2) +
+  scale_fill_brewer(palette = "Set3") +
+  labs(edge_width = "sample",
+       fill = "",
+       title = "Sols 5 infections r^total≥0.9") +
+  theme_graph() #+ theme(legend.position = "none")
+
+network_SI_four_episodes<- sols_tidy_sig %>% 
+  filter(episodes==4) %>%
+  #filtering samples with more than 2 episodes
+  activate(edges) %>% 
+  filter(rtotal1 >= 0.9) %>% 
+  ggraph(layout = "fr") + 
+  geom_edge_link(color = "darkgrey", alpha = 0.5) + 
+  geom_node_point(aes(fill = trt_label), shape = 21, color = "black", size = 4) +
+  geom_node_text(aes(label = patient_id), repel = TRUE, size=2) +
+  scale_fill_brewer(palette = "Set3") +
+  labs(edge_width = "sample",
+       fill = "",
+       title = "Sols 4 infections r^total≥0.9") +
+  theme_graph() #+
+
+network_SI_three_episodes<- sols_tidy_sig %>% 
+  filter(episodes==3) %>%
+  #filtering samples with more than 2 episodes
+  activate(edges) %>% 
+  filter(rtotal1 >= 0.9) %>% 
+  ggraph(layout = "fr") + 
+  geom_edge_link(color = "darkgrey", alpha = 0.5) + 
+  geom_node_point(aes(fill = as.factor(infoD)), shape = 21, color = "black", size = 4) +
+  geom_node_text(aes(label = patient_id), repel = TRUE, size=2) +
+  scale_fill_brewer(palette = "Set3") +
+  labs(edge_width = "sample",
+       fill = "",
+       title = "Sols 3 infections r^total≥0.9") +
+  theme_graph() #+
+
+
+plot_group<- ggarrange(network_SI_three_episodes,network_SI_four_episodes,
+          network_SI_five_episodes)
+```
+
+#### Below we restrict our network only to infections on D0 to examine total relatedness (`r^total`) of baseline samples in Solomon Islands using a threshold of ≥0.90. Nodes are annotated with the patientID and there are 11 clusters (sample membership range n=2 to 5).
+```{r}
+sols_tidy_sig %>% 
+  activate(nodes) %>% 
+  filter(redcap_event_name == "enrollment_arm_1") %>% 
+  activate(edges) %>% 
+  filter(rtotal1 >= 0.9) %>% 
+  ggraph(layout = "fr") + 
+  geom_edge_link(color = "darkgrey", alpha = 0.5) + 
+  geom_node_point(aes(fill = patient_id), shape = 21, color = "black", size = 4) +
+  geom_node_text(aes(label = patient_id), repel = TRUE, size=3) +
+  labs(edge_width = "sample",
+       fill = "",
+       title = "Sols D0 infections r^total≥0.9") +
+  theme_graph() + theme(legend.position = "none")
+```
+
+#### Below we restrict our network only to those participants with recurrent infections during follow-up and we color each node by (a) patient ID and (b) the sampling day to see if there are any patterns in those participants that had recurrent infections after treatment on D0. There were only 3 paired samples that clustered together (328-D84, 328-D112; 359-D42, 359-D56; 176-DSick, 176-D28).
+```{r, eval=FALSE}
+sols_tidy_sig %>% 
+  activate(edges) %>% 
+  mutate(patientid1 = substr(sampleid1, 4, 6),
+         patientid2 = substr(sampleid2, 4, 6)) %>% 
+  filter(patientid1 == patientid2) %>% 
+  filter(rtotal1 >= 0.9) %>% 
+  ggraph(layout = "fr") + 
+  geom_edge_link(color = "darkgrey", alpha = 0.5) + 
+  geom_node_point(aes(fill = patient_id), shape = 21, color = "black", size = 4) +
+  geom_node_text(aes(label = patient_id), repel = TRUE, size=2) +
+  # scale_fill_brewer(palette = "Set3") +
+  labs(edge_width = "sample",
+       fill = "",
+       title = "(a) Sols only paired infections r^total≥0.9") +
+  theme_graph() + theme(legend.position = "none")
+
+sols_tidy_sig %>% 
+  activate(edges) %>% 
+  mutate(patientid1 = substr(sampleid1, 4, 6),
+         patientid2 = substr(sampleid2, 4, 6)) %>% 
+  filter(patientid1 == patientid2) %>% 
+  filter(rtotal1 >= 0.9) %>% 
+  ggraph(layout = "fr") + 
+  geom_edge_link(color = "darkgrey", alpha = 0.5) + 
+  geom_node_point(aes(fill = redcap_event_name), shape = 21, color = "black", size = 4) +
+  geom_node_text(aes(label = patient_id), repel = TRUE, size=2) +
+  scale_fill_brewer(palette = "Set3") +
+  labs(edge_width = "sample",
+       fill = "",
+       title = "(b) Sols only paired infections r^total≥0.9") +
+  theme_graph() #+ theme(legend.position = "none")
+```
+
+### Peru
+We create nodes and edges data frames as per above, but using `r^total` estimates.
+```{r}
+# note peru_nodes created above in first relatedness network section
+
+peru_edges_sig <- sig_pe %>% left_join(peru_nodes %>% select(sample_id, id), by = c("sampleid1" = "sample_id")) %>% rename(id.x = id)
+
+peru_edges_sig <- peru_edges_sig %>% left_join(peru_nodes %>% select(sample_id, id), by = c("sampleid2" = "sample_id")) %>% rename(id.y = id)
+
+peru_tidy_sig <- tbl_graph(nodes = peru_nodes, edges = peru_edges_sig, directed = T)
+```
+
+#### Below we plot relatedness (`r^total`) of all sample pairs in Peru using a threshold of ≥0.90. Nodes are annotated with the patientID.
+```{r}
+peru_tidy_sig %>% 
+  activate(nodes) %>% 
+  mutate(community= if_else(str_detect(sample_id, "^AL"), "LUPUNA", "CAHUIDE")) %>%
+  #filter(max_moi == "1") %>%
+  mutate(
+    season = case_when(
+    date <= as.Date("2015-05-31") ~ "A: HT Dic 2014 - May 2015",
+    date >= as.Date("2015-06-01") & date <= as.Date("2015-10-31") ~ "B: LT Jun 2015 - Oct 2015",
+    date >= as.Date("2015-11-01") ~ "C: HT Nov 2015 - Dic 2015",
+    TRUE ~ "Outside Range"
+  )) %>%
+  activate(edges) %>% 
+  filter(rtotal1 >= 0.9) %>% 
+  ggraph(layout = "fr") + 
+  geom_edge_link(color = "darkgrey", alpha = 0.5) + 
+  geom_node_point(aes(fill = season), shape = 21, color = "black", size = 4) +
+  geom_node_text(aes(label = patient_id), repel = TRUE, size=2) +
+  labs(edge_width = "sample",
+       fill = "",
+       title = "Peru all infections r^total≥0.9") +
+  theme_graph() + theme(legend.position = "bottom") + facet_graph(~community)
+```
+
+#### Below we plot the relatedness network for all samples but we color each node by the infection number (i.e. 1st, 2nd etc) to see if there are any patterns in those participants that had recurrent infections. 
+```{r}
+peru_tidy_sig %>% 
+  activate(edges) %>% 
+  filter(rtotal1 >= 0.9) %>% 
+  ggraph(layout = "fr") + 
+  geom_edge_link(color = "darkgrey", alpha = 0.5) + 
+  geom_node_point(aes(fill = factor(infection_num)), shape = 21, color = "black", size = 4) +
+  geom_node_text(aes(label = patient_id), repel = TRUE, size=2) +
+  scale_fill_brewer(palette = "Set2") +
+  labs(edge_width = "sample",
+       fill = "infection number",
+       title = "Peru all infections r^total≥0.9") +
+  theme_graph() 
+```
+
+#### Below we restrict our network only to the 1st infections (excluding any recurrent infections) to examine total relatedness (`r^total`) of samples in Peru without paired samples as potential confounders using a threshold of ≥0.90. Nodes are annotated with the homeID.
+
+```{r}
+peru_tidy_sig %>% 
+  activate(nodes) %>% 
+  filter(infection_num == 1) %>% 
+  activate(edges) %>% 
+  filter(rtotal1 >= 0.9) %>% 
+  ggraph(layout = "fr") + 
+  geom_edge_link(color = "darkgrey", alpha = 0.5) + 
+  geom_node_point(aes(fill = home_id), shape = 21, color = "black", size = 4) +
+  geom_node_text(aes(label = home_id), repel = TRUE, size = 2) +
+  labs(edge_width = "sample",
+       fill = "",
+       title = "Peru 1st infections r^total≥0.9") +
+  theme_graph() + theme(legend.position = "none")
+```
+
+# Cross-checking results
+
+Reasurringly there seem to be different relatedness patterns in Sols vs Peru, for example higher relatedness overall in Peruvian samples vs Solomon Islands (expected given the study design and sample populations). Now we perform a few sanity checks to cross-check results, especially to better understand the significant pairwise comparisons vs non-significant and also whether there are any differences between paired and non-paired samples (ie are there any potential issues with our assumption that we can identify?)
+
+## Checking `r^` significant vs non-significant pw comparisons 
+We would expect that significant pairwise comparisons should be IBD>0 and non-significant pairwise comparisons should include IBD=0, sanity check is below. 
+
+### Solomon Islands
+First we save a list of all sample pairs that had significant IBD. 
+```{r}
+sols_sig_pairs <- sols_edges_sig %>% mutate(pair = paste(sampleid1,"/", sampleid2)) %>% select(pair)
+```
+
