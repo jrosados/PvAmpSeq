@@ -306,9 +306,9 @@ peru_nodes <- peru_data %>%
                 ungroup()
       
 
-peru_edges <- peru_ibd %>% left_join(peru_nodes %>% select(sample_id, id), by = c("sampleid1" = "sample_id")) %>% rename(id.x = id)
+peru_edges <- peru_ibd %>% left_join(peru_nodes %>% select(sample_id, id, date), by = c("sampleid1" = "sample_id")) %>% rename(id.x = id, date2 = date)
 
-peru_edges <- peru_edges %>% left_join(peru_nodes %>% select(sample_id, id), by = c("sampleid2" = "sample_id")) %>% rename(id.y = id)
+peru_edges <- peru_edges %>% left_join(peru_nodes %>% select(sample_id, id,date), by = c("sampleid2" = "sample_id")) %>% rename(id.y = id, date1 = date)
 ```
 
 
@@ -566,3 +566,8 @@ write_rds(peru_sig_meta,"intermediate_data/peru_sig_meta.rds", "xz")
 
 
 ```
+
+```{r}
+save.image("intermediate_data/Dcifer_IBD.RData")
+```
+
