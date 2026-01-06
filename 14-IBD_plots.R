@@ -312,6 +312,73 @@ print(Supp_fig_ibd_days)
 #ggsave("figs/figure4_IBD_v2.pdf", units="cm", width=20.14, height=25.12, dpi=300)
 ggsave("figs/Supp_fig_ibd_days.png", units="cm", width=20.14, height=25.12, dpi=300)
 
+
+# Number of previous infections in Peru -----------------------------------
+
+PE_all_samples <- Epi_data_PE %>% 
+  mutate(PvPCR = if_else(PCR == 2 |PCR == 4, "Pv+","Pv-",
+                         missing = "unknown")) %>%
+  mutate(date = as.Date(date, format = "%m/%d/%Y")) %>%
+  group_by(cod_per) %>% 
+  summarise(
+    PCR_until_Nov2014 = sum(PvPCR == "Pv+" & date <= as.Date("2014-11-30"), na.rm = TRUE),
+    PCR_Jan2013_Dec2015 = sum(PvPCR == "Pv+" & 
+                                date >= as.Date("2013-01-01") & 
+                                date <= as.Date("2015-12-31"), na.rm = TRUE),
+    
+    Pv_clinic_until_Nov2014 = sum(clinic_Pvinf == "1" & date <= as.Date("2014-11-30"), na.rm = TRUE),
+    Pv_clinic_Jan2013_Dec2015 = sum(clinic_Pvinf == "1" & date <= as.Date("2015-12-31"), na.rm = TRUE),
+                                  
+    Pv_treatment_until_Nov2014 = sum(medicamento2 == "P" |medicamento2 == "C" & date <= as.Date("2014-11-30"), na.rm = TRUE),
+    Pv_treatment_Jan2013_Dec2015 = sum(medicamento2 == "P" |medicamento2 == "C" & date <= as.Date("2015-12-31"), na.rm = TRUE))
+
+write.csv(PE_all_samples, "PE_all_samples_num_infec.csv", row.names = F)
+
+PE_sample_subset <- Epi_data_PE %>% 
+  filter(cod_per %in% AmpSeq_samples_data_PE$PatientName)  %>%
+  mutate(PvPCR = if_else(PCR == 2 |PCR == 4, "Pv+","Pv-",
+                         missing = "unknown")) %>%
+  mutate(date = as.Date(date, format = "%m/%d/%Y")) %>%
+  group_by(cod_per) %>% 
+  summarise(
+    PCR_until_Nov2014 = sum(PvPCR == "Pv+" & date <= as.Date("2014-11-30"), na.rm = TRUE),
+    PCR_Jan2013_Dec2015 = sum(PvPCR == "Pv+" & 
+                                date >= as.Date("2013-01-01") & 
+                                date <= as.Date("2015-12-31"), na.rm = TRUE),
+    
+    Pv_clinic_until_Nov2014 = sum(clinic_Pvinf == "1" & date <= as.Date("2014-11-30"), na.rm = TRUE),
+    Pv_clinic_Jan2013_Dec2015 = sum(clinic_Pvinf == "1" & date <= as.Date("2015-12-31"), na.rm = TRUE),
+    
+    Pv_treatment_until_Nov2014 = sum(medicamento2 == "P" |medicamento2 == "C" & date <= as.Date("2014-11-30"), na.rm = TRUE),
+    Pv_treatment_Jan2013_Dec2015 = sum(medicamento2 == "P" |medicamento2 == "C" & date <= as.Date("2015-12-31"), na.rm = TRUE))
+
+
+write.csv(PE_sample_subset, "PE_sample_subset_num_infec.csv", row.names = F)
+
+
+
+# Just selected samples in this study
+PE_all_samples <- Epi_data_PE %>% 
+  filter(cod_samp %in% AmpSeq_samples_data_PE$SampleID)  %>%
+  select(cod_per, cod_samp, date) %>%
+  mutate(date = as.Date(date, format = "%m/%d/%Y")) %>%
+  arrange(cod_per, cod_samp, date) %>% 
+  distinct() %>% 
+  # Calculate delay since previous infection, within each ID
+  group_by(cod_per) %>% 
+  mutate(delay_since_prev_ep = as.numeric( date - first(date), 
+                                           units = "days", na.rm=T),
+         recurrence =rank(date)) %>%
+  select(cod_per, cod_samp, delay_since_prev_ep,recurrence) %>%
+  #filter( !delay_since_prev_ep ==0) %>%
+  filter(recurrence >1) %>%
+  select(-recurrence) %>%
+  rename(patientid1 = cod_per, 
+         sampleid1 = cod_samp,
+         day_id1 = delay_since_prev_ep) %>%
+  left_join(peru_ibd %>% select(sampleid1,estimate, patientid1, day_id1)) 
+
+
 # Proportions -------------------------------------------------------------
 
 sols_ibd %>% 
